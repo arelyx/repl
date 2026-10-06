@@ -28,13 +28,16 @@ def repl_root(repl_id: str) -> Path:
 
 
 def chown_tree(path: str | Path) -> None:
+    # The repl user can swap any directory under `path` for a symlink while we
+    # walk, so never resolve a joined path: chown each entry relative to its
+    # parent's fd without following symlinks (fwalk never descends symlinks).
     path = str(path)
     try:
         os.lchown(path, RUNNER_UID, RUNNER_GID)
-        for dirpath, dirnames, filenames in os.walk(path):
+        for _dirpath, dirnames, filenames, dirfd in os.fwalk(path, follow_symlinks=False):
             for n in dirnames + filenames:
                 try:
-                    os.lchown(os.path.join(dirpath, n), RUNNER_UID, RUNNER_GID)
+                    os.chown(n, RUNNER_UID, RUNNER_GID, dir_fd=dirfd, follow_symlinks=False)
                 except OSError:
                     pass
     except (PermissionError, FileNotFoundError):
@@ -147,7 +150,8 @@ def _parent_beneath(repl_id: str, rel: str, create_parents: bool = False):
 def _open_beneath(repl_id: str, rel: str, flags: int, create_parents: bool = False) -> int:
     with _parent_beneath(repl_id, rel, create_parents) as (dir_fd, name):
         try:
-            return os.open(name, flags | os.O_NOFOLLOW, 0o644, dir_fd=dir_fd)
+            # O_NONBLOCK so a FIFO planted by the repl user can't hang the open.
+            fd = os.open(name, flags | os.O_NOFOLLOW | os.O_NONBLOCK, 0o644, dir_fd=dir_fd)
         except (FileNotFoundError, NotADirectoryError):
             raise HTTPException(status_code=404, detail="File not found")
         except OSError as e:
@@ -155,14 +159,19 @@ def _open_beneath(repl_id: str, rel: str, flags: int, create_parents: bool = Fal
                 raise HTTPException(status_code=400, detail="Refusing to follow a symlink")
             if e.errno == errno.EISDIR:
                 raise HTTPException(status_code=400, detail="Path is a directory")
+            if e.errno == errno.ENXIO:  # write-open of a FIFO with no reader
+                raise HTTPException(status_code=400, detail="Not a regular file")
             raise
+    if not stat.S_ISREG(os.fstat(fd).st_mode):
+        os.close(fd)
+        raise HTTPException(status_code=400, detail="Not a regular file")
+    os.set_blocking(fd, True)
+    return fd
 
 
 def _read_bytes(repl_id: str, rel: str) -> bytes:
     fd = _open_beneath(repl_id, rel, os.O_RDONLY)
     with os.fdopen(fd, "rb") as f:
-        if not stat.S_ISREG(os.fstat(f.fileno()).st_mode):
-            raise HTTPException(status_code=404, detail="File not found")
         return f.read()
 
 
@@ -230,16 +239,28 @@ def delete_node(repl_id: str, rel: str) -> None:
 
 
 def zip_repl(repl_id: str) -> bytes:
-    root = repl_root(repl_id)
+    # Open every file relative to its parent's fd with O_NOFOLLOW and check
+    # the fd is a regular file, so a symlink swapped in mid-walk can't make
+    # root read outside the repl, and a FIFO can't block us.
+    root = str(repl_root(repl_id))
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        for dirpath, dirnames, filenames in os.walk(root):
-            dirnames[:] = [d for d in dirnames if d != ".git" and not os.path.islink(os.path.join(dirpath, d))]
+        for dirpath, dirnames, filenames, dirfd in os.fwalk(root, follow_symlinks=False):
+            dirnames[:] = [d for d in dirnames if d != ".git"]
             for f in filenames:
-                full = os.path.join(dirpath, f)
-                if os.path.islink(full):
-                    continue
-                zf.write(full, os.path.relpath(full, root))
+                try:
+                    fd = os.open(f, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=dirfd)
+                except OSError:
+                    continue  # symlink (ELOOP), vanished, unreadable...
+                try:
+                    if not stat.S_ISREG(os.fstat(fd).st_mode):
+                        continue
+                    os.set_blocking(fd, True)
+                    with os.fdopen(fd, "rb", closefd=False) as fh:
+                        data = fh.read()
+                finally:
+                    os.close(fd)
+                zf.writestr(os.path.relpath(os.path.join(dirpath, f), root), data)
     return buf.getvalue()
 
 

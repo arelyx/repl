@@ -1,5 +1,8 @@
 """Thin wrapper around the git CLI. All functions are blocking; call via run_in_threadpool."""
+import os
+import shutil
 import subprocess
+import tempfile
 
 from fastapi import HTTPException
 
@@ -35,7 +38,10 @@ class GitError(Exception):
     pass
 
 
-def git(repo: str, *args: str, author: tuple[str, str] | None = None, check: bool = True) -> str:
+def git(
+    repo: str, *args: str, author: tuple[str, str] | None = None, check: bool = True,
+    env_extra: dict[str, str] | None = None,
+) -> str:
     cmd = ["git", "-c", "safe.directory=*", "-c", "core.quotepath=false", *_GIT_HARDENING]
     if author:
         cmd += ["-c", f"user.name={author[0]}", "-c", f"user.email={author[1]}"]
@@ -44,7 +50,7 @@ def git(repo: str, *args: str, author: tuple[str, str] | None = None, check: boo
     cmd += list(args)
     p = subprocess.run(
         cmd, cwd=repo, capture_output=True, text=True, errors="replace", timeout=60,
-        env=_GIT_ENV, user=RUNNER_UID, group=RUNNER_GID, extra_groups=[],
+        env={**_GIT_ENV, **(env_extra or {})}, user=RUNNER_UID, group=RUNNER_GID, extra_groups=[],
     )
     if check and p.returncode != 0:
         raise GitError((p.stderr or p.stdout).strip())
@@ -134,12 +140,19 @@ def validate_sha(sha: str) -> str:
 def diff(repo: str, sha: str | None) -> str:
     if sha:
         sha = validate_sha(sha)
-        return git(repo, "show", "--format=", "--patch", sha)
-    # working tree (including untracked) vs HEAD
-    git(repo, "add", "-A", "--intent-to-add", check=False)
-    out = git(repo, "diff", "HEAD")
-    git(repo, "reset", "-q", check=False)
-    return out
+        return git(repo, "show", "--no-ext-diff", "--format=", "--patch", sha)
+    # Working tree (including untracked) vs HEAD. Viewers can call this, so
+    # never touch the real index: build a throwaway one from HEAD, mark
+    # untracked files intent-to-add in it, and diff against that.
+    tmpdir = tempfile.mkdtemp(prefix="replot-diff-")
+    try:
+        os.chown(tmpdir, RUNNER_UID, RUNNER_GID)
+        env = {"GIT_INDEX_FILE": os.path.join(tmpdir, "index")}
+        git(repo, "read-tree", "HEAD", check=False, env_extra=env)
+        git(repo, "add", "-A", "--intent-to-add", check=False, env_extra=env)
+        return git(repo, "diff", "--no-ext-diff", "HEAD", env_extra=env)
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
 
 
 def show(repo: str, sha: str, path: str) -> str:
