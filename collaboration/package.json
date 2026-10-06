@@ -1,0 +1,11 @@
+{
+  "name": "replot-collaboration",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": { "start": "node src/index.js" },
+  "dependencies": {
+    "@hocuspocus/server": "^2.15.0",
+    "yjs": "^13.6.29"
+  }
+}
