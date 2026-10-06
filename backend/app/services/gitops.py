@@ -3,7 +3,32 @@ import subprocess
 
 from fastapi import HTTPException
 
-from app.services.fsops import chown_tree
+from app.services.fsops import RUNNER_GID, RUNNER_UID, chown_tree
+
+# Repl users have a shell next to their .git directory, so .git/config and
+# .gitattributes are attacker-controlled (core.fsmonitor, hooks, filter
+# drivers can all run commands). The backend holds the Docker socket, so git
+# must never run as root: it runs as the repl's own unprivileged uid, with no
+# supplementary groups (no docker group), a throwaway HOME, no system/global
+# config, and the common command-running knobs forced off.
+_GIT_ENV = {
+    "PATH": "/usr/local/bin:/usr/bin:/bin",
+    "HOME": "/tmp/replot-git-home",
+    "GIT_CONFIG_NOSYSTEM": "1",
+    "GIT_CONFIG_GLOBAL": "/dev/null",
+    "GIT_TERMINAL_PROMPT": "0",
+    "LANG": "C.UTF-8",
+}
+_GIT_HARDENING = [
+    "-c", "core.fsmonitor=false",
+    "-c", "core.hooksPath=/dev/null",
+    "-c", "core.sshCommand=false",
+    "-c", "core.editor=false",
+    "-c", "core.pager=cat",
+    "-c", "credential.helper=",
+    "-c", "protocol.allow=never",
+    "-c", "diff.external=",
+]
 
 
 class GitError(Exception):
@@ -11,19 +36,23 @@ class GitError(Exception):
 
 
 def git(repo: str, *args: str, author: tuple[str, str] | None = None, check: bool = True) -> str:
-    cmd = ["git", "-c", "safe.directory=*", "-c", "core.quotepath=false"]
+    cmd = ["git", "-c", "safe.directory=*", "-c", "core.quotepath=false", *_GIT_HARDENING]
     if author:
         cmd += ["-c", f"user.name={author[0]}", "-c", f"user.email={author[1]}"]
     else:
         cmd += ["-c", "user.name=Replot", "-c", "user.email=replot@localhost"]
     cmd += list(args)
-    p = subprocess.run(cmd, cwd=repo, capture_output=True, text=True, errors="replace", timeout=60)
+    p = subprocess.run(
+        cmd, cwd=repo, capture_output=True, text=True, errors="replace", timeout=60,
+        env=_GIT_ENV, user=RUNNER_UID, group=RUNNER_GID, extra_groups=[],
+    )
     if check and p.returncode != 0:
         raise GitError((p.stderr or p.stdout).strip())
     return p.stdout
 
 
 def init_repo(repo: str, message: str, author: tuple[str, str]) -> None:
+    chown_tree(repo)  # git runs as the repl uid, so it must own the tree first
     git(repo, "init", "-b", "main")
     git(repo, "add", "-A")
     commit(repo, message, author, allow_empty=True)
