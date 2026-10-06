@@ -113,6 +113,7 @@ def child_env(port=None):
         "PORT": str(port or DEFAULT_PORT),
         "REPLOT": "1",
         "PYTHONUNBUFFERED": "1",
+        "SDL_AUDIODRIVER": env.get("SDL_AUDIODRIVER", "dummy"),  # no sound card
     })
     return env
 
