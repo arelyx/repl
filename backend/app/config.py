@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     COOKIE_SECURE: bool = False
     JWT_EXPIRE_DAYS: int = 7
     CORS_ORIGINS: str = "http://localhost:5173"
+    COLLAB_COMMAND_URL: str = "http://collaboration:1235"
 
     @property
     def repls_host_dir(self) -> str:
