@@ -1,0 +1,4 @@
+run = "tsx index.ts"
+language = "typescript"
+entrypoint = "index.ts"
+gui = false

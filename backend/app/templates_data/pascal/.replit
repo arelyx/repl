@@ -1,0 +1,4 @@
+run = "fpc -v0 main.pas >/dev/null && ./main"
+language = "pascal"
+entrypoint = "main.pas"
+gui = false

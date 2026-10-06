@@ -1,0 +1,4 @@
+run = "cargo run -q"
+language = "rust"
+entrypoint = "src/main.rs"
+gui = false

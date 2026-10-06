@@ -1,0 +1,4 @@
+run = "sbcl --script main.lisp"
+language = "lisp"
+entrypoint = "main.lisp"
+gui = false

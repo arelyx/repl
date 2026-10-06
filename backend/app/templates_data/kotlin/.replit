@@ -1,0 +1,4 @@
+run = "kotlinc main.kt -include-runtime -d main.jar 2>/dev/null && java -jar main.jar"
+language = "kotlin"
+entrypoint = "main.kt"
+gui = false

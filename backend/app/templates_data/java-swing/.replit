@@ -1,0 +1,4 @@
+run = "javac Main.java && java Main"
+language = "java"
+entrypoint = "Main.java"
+gui = true

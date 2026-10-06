@@ -1,0 +1,4 @@
+run = "guile --no-auto-compile main.scm"
+language = "scheme"
+entrypoint = "main.scm"
+gui = false

@@ -1,0 +1,5 @@
+run = "npm install --no-audit --no-fund && npm run dev"
+language = "javascript"
+entrypoint = "src/App.vue"
+gui = false
+port = 5173

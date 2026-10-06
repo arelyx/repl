@@ -1,0 +1,4 @@
+run = "go run ."
+language = "go"
+entrypoint = "main.go"
+gui = false

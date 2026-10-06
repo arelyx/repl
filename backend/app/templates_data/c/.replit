@@ -1,0 +1,4 @@
+run = "gcc -o main main.c -lm && ./main"
+language = "c"
+entrypoint = "main.c"
+gui = false
