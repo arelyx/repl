@@ -1,4 +1,4 @@
-run = "lua5.4 main.lua"
+run = "lua main.lua"
 language = "lua"
 entrypoint = "main.lua"
 gui = false

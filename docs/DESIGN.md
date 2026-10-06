@@ -66,7 +66,7 @@ collaboration ──▶ backend /api/v1/internal/*  (auth, load/store file conte
 - **One fat "polyglot" image** (like Replit's polygott) instead of an image per
   language. Templates can mix languages (a Flask backend with a React
   frontend), switching language does not need a new container, and there is
-  only one image to build and cache. The cost is a large image (~6 GB), paid once.
+  only one image to build and cache. The cost is a large image (~10 GB), paid once.
 - **Files live on the host, bind-mounted into the container.** The backend
   reads and writes files without the container running, so the editor works
   when the repl is stopped. git runs from the backend against the same
@@ -129,6 +129,52 @@ port = 8000                       # template hint: default web preview port
 ## 5. Container runtime
 
 - Image: `replit-polyglot:latest` (`runner/Dockerfile`).
+
+### Toolchains are current upstream releases
+
+The point is a usable code box, not a period piece, so every language runs
+its latest stable release. The base is the current Ubuntu LTS (26.04).
+Everywhere the distro package trails upstream, the toolchain comes from its
+own official channel at a pinned version:
+
+| Language | Version | Source |
+|---|---|---|
+| C / C++ / Fortran | GCC 16.2 | official `gcc` image (`/usr/local`) |
+| C / C++ | Clang 23 | apt.llvm.org |
+| Python | 3.14.8 | python-build-standalone via uv (bundles Tk) |
+| Node.js | 26.10 | nodejs.org |
+| TypeScript | 7.0 | npm |
+| Go | 1.27.1 | go.dev |
+| Rust | 1.99.0 | rustup |
+| Java | Temurin 27 | Adoptium |
+| Maven | 3.10.0 | Apache |
+| Kotlin | 2.4.20 | JetBrains |
+| C# / .NET | SDK 10.0.401 | dotnet-install |
+| Ruby | 4.0.7 | built from source |
+| PHP | 8.5.11 | built from source |
+| Perl | 5.44.0 | built from source |
+| Lua | 5.5.1 | built from source |
+| NASM | 3.02 | built from source |
+| Haskell | GHC 9.14.1 | ghcup |
+| R | 4.6.1 | CRAN's Ubuntu repo |
+| Common Lisp | SBCL 2.6.9 | sbcl.org binary |
+| Pascal / Scheme | FPC 3.2.2, Guile 3.0.11 | Ubuntu (already the latest upstream) |
+
+The pins are `ARG`s at the top of the Dockerfile, so builds are
+reproducible.
+
+- **Bumping the pins:** `make update-versions` (`runner/update-versions.py`)
+  asks each project's release feed, or endoflife.date, for the latest stable
+  release and rewrites the pins. A weekly GitHub Actions workflow runs it and
+  opens a PR when something moved.
+- **Checking a build:** the build ends by running `replot-versions`, which
+  prints every toolchain's version and fails the build if any of them
+  doesn't start. `make versions` runs the same check against a built image.
+- **Templates:** they follow the toolchains (Go `go 1.27`, `net10.0`, Rust
+  edition 2024, C++26, Spring Boot 4.1 on Java 27, React 19 and Vue 3.5 on
+  Vite 8, Express 5). Version numbers are kept out of template descriptions
+  so they can't go stale.
+
 - Container name `repl-{id}`, labels `replot.repl={id}`. Each repl gets its own
   bridge network `rc-repl-{id}`, which only the repl, nginx, and the backend
   join. On a shared network every repl could reach every other repl's
@@ -362,7 +408,8 @@ docker-compose.yml
 
 ```
 cp .env.example .env
-docker build -t replit-polyglot:latest runner/
+docker build -t replit-polyglot:latest runner/      # or: make runner
+make versions                                      # print toolchain versions
 docker compose up -d --build
 open http://localhost:8380
 ```
