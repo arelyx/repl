@@ -288,6 +288,15 @@ tab opens. For `gui = true` templates, Run focuses Display.
 - Repl containers sit on their own `rc-repls` bridge network. They can reach
   the internet (for `pip install` and `npm install`) but not postgres, which
   sits on `rc-internal`.
+- **git never runs as root.** Repl users have a shell next to `.git`, so
+  `.git/config` and `.gitattributes` are attacker-controlled: `core.fsmonitor`,
+  hooks, and filter drivers can all run commands. The backend holds the Docker
+  socket, so it runs git as uid 1000 with no supplementary groups (and so no
+  docker group). It also uses a throwaway `HOME`, no system or global config,
+  and forces `core.fsmonitor`, `core.hooksPath`, `diff.external` and the
+  credential helper off. Verified: a malicious `filter.x.clean` runs as
+  `uid=1000`, and that uid can neither open `docker.sock` nor read the
+  backend's environment.
 - File API paths are resolved and checked against the repl root (no `..`, no
   symlink escape).
 - Previews are served on a different origin (`*.preview.localhost`) from the
