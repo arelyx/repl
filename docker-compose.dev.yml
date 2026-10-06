@@ -1,0 +1,16 @@
+# Development overrides (opt in explicitly):
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+#   cd frontend && npm run dev        # Vite + HMR on http://localhost:3000
+# Backend and collaboration reload on source changes. The Vite dev server
+# proxies /api, /ws and /collab to nginx on :8380.
+
+services:
+  backend:
+    volumes:
+      - ./backend/app:/app/app
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+  collaboration:
+    volumes:
+      - ./collaboration/src:/app/src
+    command: ["node", "--watch", "src/index.js"]
