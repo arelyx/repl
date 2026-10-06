@@ -298,7 +298,11 @@ tab opens. For `gui = true` templates, Run focuses Display.
   `uid=1000`, and that uid can neither open `docker.sock` nor read the
   backend's environment.
 - File API paths are resolved and checked against the repl root (no `..`, no
-  symlink escape).
+  symlink escape). Reads and writes then walk the path one component at a
+  time with `openat` + `O_NOFOLLOW`. Without that, a user could swap a
+  directory for a symlink between the check and the backend's root `open` and
+  read something like `/proc/self/environ`. Rename and delete still use
+  check-then-act, which is a known gap.
 - Previews are served on a different origin (`*.preview.localhost`) from the
   app, so user JavaScript cannot read the auth cookie or call the API with it.
 
