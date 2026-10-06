@@ -301,8 +301,8 @@ tab opens. For `gui = true` templates, Run focuses Display.
   symlink escape). Reads and writes then walk the path one component at a
   time with `openat` + `O_NOFOLLOW`. Without that, a user could swap a
   directory for a symlink between the check and the backend's root `open` and
-  read something like `/proc/self/environ`. Rename and delete still use
-  check-then-act, which is a known gap.
+  read something like `/proc/self/environ`. Create, rename, and delete use
+  the same walk with `mkdirat`, `renameat`, `unlinkat`, and fd-based `rmtree`.
 - Previews are served on a different origin (`*.preview.localhost`) from the
   app, so user JavaScript cannot read the auth cookie or call the API with it.
 
