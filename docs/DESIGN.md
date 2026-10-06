@@ -325,3 +325,74 @@ gVisor runtime; per-user quotas; packager UI (pip/npm search); LSP
 (PlottedPlant already runs an LSP container); GitHub import and push;
 always-on repls; debugger (DAP) integration; multi-host scheduling with a
 container pool for instant start.
+
+---
+
+## 14. Implementation status (2026-10-05)
+
+Built in one evening by a lead plus three parallel agents, each in its own git
+worktree and PR:
+
+| PR | Scope |
+|---|---|
+| #1 | Infra: nginx, Hocuspocus, compose |
+| #2 | Backend |
+| #3 | Runner agent and 35 templates |
+| #4 | Frontend |
+| #5 | Fixes from end-to-end browser testing |
+
+The section 6 API was the contract between them. Integration needed only
+small fixes.
+
+### Verified end to end (through nginx, in Chrome and with `scripts/smoke_test.py`)
+
+- Register and log in. Create a repl from a template, which starts its
+  container. Open the Console and press Run to stream output. Use the Shell.
+- **GUI:** Tkinter renders in the Display tab (noVNC) and is interactive.
+- **Web preview:** Flask is served at `{id}-8000.preview.localhost:8380` in the
+  Webview, which switches automatically when a new port opens.
+- **Multiplayer:** a second user, shared as editor, edited `main.py` over Yjs
+  from a Node client. The edit appeared live in the first user's Monaco and was
+  saved to disk.
+- **Git:** typing in the editor marks the file modified. A commit from the
+  Version control panel shows up in the history.
+- **Permissions:**
+  - Outsiders get 404 on the repl.
+  - VNC returns 401 with no cookie and 403 for a non-collaborator.
+  - Internal endpoints are not reachable through nginx.
+- **Templates:** these runs exited 0 or bound their port:
+  - **Languages:** C, C++, Go, Rust, Kotlin, Haskell, TypeScript, PHP, Lua,
+    Perl, Bash.
+  - **Web servers:** Flask, FastAPI, Django, Express, PHP, Go net/http, static
+    HTML.
+  - **Frameworks:** React + Vite, Vue + Vite, Spring Boot. These install
+    dependencies on first run.
+  - **Not covered by the smoke script:** Python, Node.js, Java, C# and Ruby
+    wait for stdin, so they time out there. The runtime PR tested them
+    separately, piping input in.
+
+### Decisions made while building
+
+- **Agent vs. `docker exec`.** The plan was to try both. A shared run process
+  with scrollback, multiple viewers, and port discovery all need state that
+  lives in the container, which `docker exec` relayed by the backend cannot
+  hold, so the agent was picked before writing the exec version.
+- **Ports bound to loopback are not offered as previews.** Docker's embedded
+  DNS listens on `127.0.0.11` inside every container, and the first build
+  offered it as a "web server". The preview proxy can't reach loopback-bound
+  servers anyway.
+- **noVNC uses `resize=scale`.** Xvfb has a fixed framebuffer, so remote resize
+  does nothing.
+- **Restore deletes files added after the target commit.** The working tree
+  then matches the commit exactly, which is what users expect from "restore to
+  this version".
+
+### Known gaps
+
+- Restoring while another user has the file open: that user's Yjs room keeps
+  the old text until it unloads, and its next save would overwrite the restore.
+  The fix is for the backend to tell the collaboration server to close the
+  room, as PlottedPlant's `close-room` command does.
+- Editing a file from the shell while a room is open: the open room is not
+  updated until it unloads.
+- No resource quotas per user, and no gVisor yet (§9).

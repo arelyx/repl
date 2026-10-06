@@ -32,7 +32,7 @@ async def run_template(s: aiohttp.ClientSession, slug: str) -> bool:
         await ws.send_str(json.dumps({"type": "resize", "cols": 100, "rows": 30}))
         await ws.send_str(json.dumps({"type": "start"}))
         try:
-            async with asyncio.timeout(90):
+            async with asyncio.timeout(180):
                 async for msg in ws:
                     m = json.loads(msg.data)
                     if m["type"] == "output":
@@ -41,11 +41,16 @@ async def run_template(s: aiohttp.ClientSession, slug: str) -> bool:
                         ok = m["exitCode"] == 0
                         break
                     if repl.get("config", {}).get("port") and "".join(out).strip():
-                        await asyncio.sleep(8)
-                        ports = await (await s.get(f"{BASE}/api/v1/repls/{rid}/ports")).json()
-                        print(f"[{slug}] ports: {ports}")
-                        ok = bool(ports.get("ports"))
                         break
+            if repl.get("config", {}).get("port"):
+                # Web templates may install dependencies first; wait for a listener.
+                for _ in range(60):
+                    ports = await (await s.get(f"{BASE}/api/v1/repls/{rid}/ports")).json()
+                    if ports.get("ports"):
+                        print(f"[{slug}] ports: {ports['ports']}")
+                        ok = True
+                        break
+                    await asyncio.sleep(2)
         except TimeoutError:
             print(f"[{slug}] timeout")
     text = "".join(out)
