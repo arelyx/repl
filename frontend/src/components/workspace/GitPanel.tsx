@@ -30,6 +30,21 @@ import { replsApi } from "@/lib/repls";
 import type { GitCommit, GitStatus } from "@/lib/types";
 import { canEdit, useWorkspace } from "@/stores/workspace";
 
+// The API reports words ("modified"); show the familiar one-letter git codes.
+const STATUS_LETTERS: Record<string, string> = {
+  modified: "M",
+  added: "A",
+  deleted: "D",
+  renamed: "R",
+  untracked: "U",
+  conflicted: "C",
+};
+
+function statusLetter(status: string): string {
+  const s = status.trim();
+  return STATUS_LETTERS[s] ?? (s.length <= 2 ? s : s[0].toUpperCase()) ?? "M";
+}
+
 const STATUS_COLORS: Record<string, string> = {
   M: "text-yellow-400",
   A: "text-green-400",
@@ -155,8 +170,8 @@ export function GitPanel({ active }: { active: boolean }) {
                     className="flex cursor-pointer items-center gap-2 rounded px-1 text-xs hover:bg-accent"
                     onClick={() => useWorkspace.getState().openFile(c.path)}
                   >
-                    <span className={`w-5 shrink-0 font-mono font-semibold ${STATUS_COLORS[c.status.trim()] ?? "text-muted-foreground"}`}>
-                      {c.status.trim() || "M"}
+                    <span className={`w-5 shrink-0 font-mono font-semibold ${STATUS_COLORS[statusLetter(c.status)] ?? "text-muted-foreground"}`}>
+                      {statusLetter(c.status) || "M"}
                     </span>
                     <span className="truncate">{c.path}</span>
                   </li>

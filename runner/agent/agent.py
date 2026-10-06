@@ -229,6 +229,7 @@ class PtyProcess:
             pass
 
     def resize(self, rows, cols):
+        rows, cols = _dim(rows, 24), _dim(cols, 80)
         self.rows, self.cols = rows, cols
         if self.master is not None:
             set_winsize(self.master, rows, cols)
@@ -395,6 +396,7 @@ class RunManager:
             self.proc.write(data)
 
     def resize(self, rows, cols):
+        rows, cols = _dim(rows, 24), _dim(cols, 80)
         self.rows, self.cols = rows, cols
         if self.proc:
             self.proc.resize(rows, cols)
@@ -404,6 +406,16 @@ RUN = RunManager()
 
 
 # ---------------------------------------------------------------- handlers
+
+def _dim(value, default):
+    # A hidden xterm reports 0 or NaN (null in JSON); never let a bad resize
+    # kill the socket and drop the messages queued behind it.
+    try:
+        n = int(value)
+    except (TypeError, ValueError):
+        return default
+    return n if 1 <= n <= 1000 else default
+
 
 def parse(msg):
     try:
@@ -417,6 +429,17 @@ async def health(request):
     return web.json_response({"ok": True, "clients": total_clients})
 
 
+def _is_loopback(addr_hex):
+    # /proc/net addresses are little-endian hex. Loopback listeners (Docker's
+    # embedded DNS on 127.0.0.11, x11vnc, servers bound to localhost) can't be
+    # reached by the preview proxy, so they are not offered as web previews.
+    if len(addr_hex) == 8:
+        return addr_hex.endswith("7F")
+    if addr_hex == "00000000000000000000000001000000":
+        return True
+    return addr_hex.startswith("0000000000000000FFFF0000") and addr_hex.endswith("7F")
+
+
 def listening_ports():
     ports = set()
     for path in ("/proc/net/tcp", "/proc/net/tcp6"):
@@ -427,8 +450,9 @@ def listening_ports():
                     parts = line.split()
                     if len(parts) < 4 or parts[3] != "0A":
                         continue
-                    port = int(parts[1].rsplit(":", 1)[1], 16)
-                    if port not in EXCLUDED_PORTS:
+                    addr, port_hex = parts[1].rsplit(":", 1)
+                    port = int(port_hex, 16)
+                    if port not in EXCLUDED_PORTS and not _is_loopback(addr):
                         ports.add(port)
         except OSError:
             pass
@@ -458,14 +482,17 @@ async def run_ws(request):
             if not obj:
                 continue
             t = obj.get("type")
-            if t == "input":
-                RUN.input(str(obj.get("data", "")))
-            elif t == "resize":
-                RUN.resize(obj.get("rows", 24), obj.get("cols", 80))
-            elif t == "start":
-                asyncio.create_task(RUN.start())
-            elif t == "stop":
-                asyncio.create_task(RUN.stop())
+            try:
+                if t == "input":
+                    RUN.input(str(obj.get("data", "")))
+                elif t == "resize":
+                    RUN.resize(obj.get("rows", 24), obj.get("cols", 80))
+                elif t == "start":
+                    asyncio.create_task(RUN.start())
+                elif t == "stop":
+                    asyncio.create_task(RUN.stop())
+            except Exception as e:  # one bad message must not drop the socket
+                print(f"run_ws: ignoring {t!r}: {e}", flush=True)
     finally:
         RUN.clients.discard(client)
         client.close()

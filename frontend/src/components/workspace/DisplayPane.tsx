@@ -9,7 +9,7 @@ export function DisplayPane() {
   const container = useWorkspace((s) => s.container);
   const [nonce, setNonce] = useState(0);
   const id = repl.id;
-  const src = `/ws/repls/${id}/vnc/vnc.html?autoconnect=1&resize=remote&reconnect=1&path=ws/repls/${id}/vnc/websockify`;
+  const src = `/ws/repls/${id}/vnc/vnc.html?autoconnect=1&resize=scale&reconnect=1&path=ws/repls/${id}/vnc/websockify`;
 
   return (
     <div className="flex h-full flex-col">
