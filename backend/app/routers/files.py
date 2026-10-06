@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Respon
 from starlette.concurrency import run_in_threadpool
 
 from app.schemas import CommitIn, FileCreate, FileRename, FileWrite, RestoreIn
-from app.services import fsops, gitops
+from app.services import collab, fsops, gitops
 from app.services.repls import author_of, require_role
 
 router = APIRouter(prefix="/repls/{repl_id}", tags=["files"])
@@ -26,6 +26,7 @@ async def get_content(path: str = Query(...), ctx=Depends(require_role("viewer")
 async def put_content(body: FileWrite, ctx=Depends(require_role("editor"))):
     repl, _, _ = ctx
     size = await run_in_threadpool(fsops.write_file, repl.id, body.path, body.content.encode("utf-8"))
+    await collab.reload_repl(repl.id)
     return {"path": body.path, "size": size}
 
 
@@ -40,6 +41,7 @@ async def create_file(body: FileCreate, ctx=Depends(require_role("editor"))):
 async def rename_file(body: FileRename, ctx=Depends(require_role("editor"))):
     repl, _, _ = ctx
     await run_in_threadpool(fsops.rename_node, repl.id, body.from_, body.to)
+    await collab.reload_repl(repl.id)
     return {"from": body.from_, "to": body.to}
 
 
@@ -47,6 +49,7 @@ async def rename_file(body: FileRename, ctx=Depends(require_role("editor"))):
 async def delete_file(path: str = Query(...), ctx=Depends(require_role("editor"))):
     repl, _, _ = ctx
     await run_in_threadpool(fsops.delete_node, repl.id, path)
+    await collab.reload_repl(repl.id)
     return Response(status_code=204)
 
 
@@ -66,6 +69,7 @@ async def upload_file(
     d = dir.strip().strip("/")
     rel = f"{d}/{name}" if d else name
     size = await run_in_threadpool(fsops.write_file, repl.id, rel, data)
+    await collab.reload_repl(repl.id)
     return {"path": rel, "size": size}
 
 
@@ -136,4 +140,5 @@ async def git_restore(body: RestoreIn, ctx=Depends(require_role("editor"))):
         fsops.safe_path(repl.id, body.path)
         path = body.path.strip("/")
     sha = await _git_call(gitops.restore, _repo(repl.id), body.sha, path, author_of(user))
+    await collab.reload_repl(repl.id)
     return {"sha": sha}

@@ -2,9 +2,12 @@
 // Each open file is a room named "{replId}::{path}" holding Y.Text("content").
 // The file on disk (owned by the backend) stays the source of truth: rooms are
 // seeded from it on load and written back to it on store.
+import http from "node:http";
+import { timingSafeEqual } from "node:crypto";
 import { Server } from "@hocuspocus/server";
 
 const PORT = parseInt(process.env.WEBSOCKET_PORT || "1234", 10);
+const COMMAND_PORT = parseInt(process.env.COMMAND_PORT || "1235", 10);
 const BACKEND = process.env.BACKEND_URL || "http://backend:8000";
 const INTERNAL_SECRET = process.env.INTERNAL_SECRET || "";
 
@@ -33,6 +36,9 @@ async function internal(method, path, body) {
   return res.status === 204 ? null : res.json();
 }
 
+// Rooms whose file vanished from disk; their pending stores are dropped.
+const discarded = new Set();
+
 const server = Server.configure({
   port: PORT,
   timeout: 30_000,
@@ -53,6 +59,7 @@ const server = Server.configure({
   },
 
   async onLoadDocument({ documentName, document }) {
+    discarded.delete(documentName);
     const text = document.getText("content");
     if (text.length > 0) return document;
     const { replId, path } = parseName(documentName);
@@ -70,10 +77,69 @@ const server = Server.configure({
   },
 
   async onStoreDocument({ documentName, document }) {
+    // The file was deleted or replaced on disk; don't resurrect stale text.
+    if (discarded.has(documentName)) return;
     const { replId, path } = parseName(documentName);
     const content = document.getText("content").toString();
     await internal("PUT", "/files/content", { repl_id: replId, path, content });
   },
 });
 
+// Re-sync every open room of a repl with the files on disk. The backend calls
+// this after anything that changes files outside the editor (git restore,
+// rename, delete, upload, REST saves). Changed text is replaced in place, so
+// connected editors update live; rooms whose file is gone are closed.
+async function reloadRepl(replId) {
+  const prefix = `${replId}::`;
+  for (const [name, document] of server.documents) {
+    if (!name.startsWith(prefix)) continue;
+    const { path } = parseName(name);
+    const qs = new URLSearchParams({ repl_id: replId, path });
+    const res = await fetch(`${BACKEND}/api/v1/internal/files/content?${qs}`, {
+      headers: { "X-Internal-Secret": INTERNAL_SECRET },
+    });
+    if (res.status === 404 || res.status === 400) {
+      discarded.add(name);
+      server.closeConnections(name);
+      continue;
+    }
+    if (!res.ok) continue;
+    const { content } = await res.json();
+    const text = document.getText("content");
+    if (typeof content === "string" && text.toString() !== content) {
+      document.transact(() => {
+        text.delete(0, text.length);
+        text.insert(0, content);
+      }, "disk-reload");
+    }
+  }
+}
+
+function secretOk(given) {
+  const a = Buffer.from(given || "");
+  const b = Buffer.from(INTERNAL_SECRET);
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+
+const commands = http.createServer((req, res) => {
+  if (req.method !== "POST" || req.url !== "/reload" || !secretOk(req.headers["x-internal-secret"])) {
+    res.writeHead(404).end();
+    return;
+  }
+  let body = "";
+  req.on("data", (chunk) => (body += chunk));
+  req.on("end", async () => {
+    try {
+      const { repl_id: replId } = JSON.parse(body);
+      if (typeof replId !== "string" || !/^[a-z0-9]+$/.test(replId)) throw new Error("bad repl_id");
+      await reloadRepl(replId);
+      res.writeHead(204).end();
+    } catch (err) {
+      console.error("reload failed:", err.message);
+      res.writeHead(400).end();
+    }
+  });
+});
+
 server.listen().then(() => console.log(`collaboration listening on :${PORT}`));
+commands.listen(COMMAND_PORT, () => console.log(`commands listening on :${COMMAND_PORT}`));
