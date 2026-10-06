@@ -38,6 +38,11 @@ async function internal(method, path, body) {
 
 // Rooms whose file vanished from disk; their pending stores are dropped.
 const discarded = new Set();
+// Room name → file content as of the last load/store/reload. Lets the disk
+// poller tell "someone edited the file from the shell" (disk moved) apart
+// from "editors have unsaved changes" (room moved).
+const lastSynced = new Map();
+const POLL_MS = parseInt(process.env.DISK_POLL_MS || "2000", 10);
 
 const server = Server.configure({
   port: PORT,
@@ -69,6 +74,7 @@ const server = Server.configure({
       if (data && typeof data.content === "string" && text.length === 0) {
         text.insert(0, data.content);
       }
+      lastSynced.set(documentName, text.toString());
     } catch (err) {
       // New/missing file: start empty; the first store will create it.
       console.warn(`load ${documentName}: ${err.message}`);
@@ -82,8 +88,36 @@ const server = Server.configure({
     const { replId, path } = parseName(documentName);
     const content = document.getText("content").toString();
     await internal("PUT", "/files/content", { repl_id: replId, path, content });
+    lastSynced.set(documentName, content);
+  },
+
+  async afterUnloadDocument({ documentName }) {
+    lastSynced.delete(documentName);
   },
 });
+
+async function readDisk(name) {
+  const { replId, path } = parseName(name);
+  const qs = new URLSearchParams({ repl_id: replId, path });
+  const res = await fetch(`${BACKEND}/api/v1/internal/files/content?${qs}`, {
+    headers: { "X-Internal-Secret": INTERNAL_SECRET },
+  });
+  if (res.status === 404 || res.status === 400) return { missing: true };
+  if (!res.ok) return { error: res.status };
+  const { content } = await res.json();
+  return { content };
+}
+
+function replaceText(name, document, content) {
+  const text = document.getText("content");
+  if (text.toString() !== content) {
+    document.transact(() => {
+      text.delete(0, text.length);
+      text.insert(0, content);
+    }, "disk-reload");
+  }
+  lastSynced.set(name, content);
+}
 
 // Re-sync every open room of a repl with the files on disk. The backend calls
 // this after anything that changes files outside the editor (git restore,
@@ -93,27 +127,37 @@ async function reloadRepl(replId) {
   const prefix = `${replId}::`;
   for (const [name, document] of server.documents) {
     if (!name.startsWith(prefix)) continue;
-    const { path } = parseName(name);
-    const qs = new URLSearchParams({ repl_id: replId, path });
-    const res = await fetch(`${BACKEND}/api/v1/internal/files/content?${qs}`, {
-      headers: { "X-Internal-Secret": INTERNAL_SECRET },
-    });
-    if (res.status === 404 || res.status === 400) {
+    const disk = await readDisk(name);
+    if (disk.missing) {
       discarded.add(name);
       server.closeConnections(name);
-      continue;
-    }
-    if (!res.ok) continue;
-    const { content } = await res.json();
-    const text = document.getText("content");
-    if (typeof content === "string" && text.toString() !== content) {
-      document.transact(() => {
-        text.delete(0, text.length);
-        text.insert(0, content);
-      }, "disk-reload");
+    } else if (typeof disk.content === "string") {
+      replaceText(name, document, disk.content);
     }
   }
 }
+
+// Pick up edits made outside the editor (shell, a program writing its own
+// source, git in the terminal). Only when the room has no unsaved changes of
+// its own; otherwise the editors win and their next store overwrites disk.
+let polling = false;
+setInterval(async () => {
+  if (polling) return;
+  polling = true;
+  try {
+    for (const [name, document] of server.documents) {
+      const last = lastSynced.get(name);
+      if (last === undefined || discarded.has(name)) continue;
+      const disk = await readDisk(name).catch(() => ({ error: true }));
+      if (typeof disk.content !== "string" || disk.content === last) continue;
+      if (document.getText("content").toString() === last) {
+        replaceText(name, document, disk.content);
+      }
+    }
+  } finally {
+    polling = false;
+  }
+}, POLL_MS);
 
 function secretOk(given) {
   const a = Buffer.from(given || "");

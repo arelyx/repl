@@ -246,6 +246,13 @@ that changed is replaced in a single Yjs transaction, so connected editors
 update live. Rooms whose file is gone are closed, and their pending stores are
 dropped so they can't bring the file back.
 
+Files can also change while nobody touches the API: an edit in the shell, a
+program rewriting its own source, `git checkout` in the terminal. For those
+the collaboration server polls each open room's file every 2 s. When the disk
+copy has moved since the last load or store and the room has no unsaved edits,
+the room takes the disk text. When the room does have unsaved edits, the
+editors win and their next store overwrites the disk copy.
+
 The frontend binds Monaco with `y-monaco` and shows remote cursors with
 awareness (name and color). If the collaboration socket cannot connect within 3 s,
 the editor falls back to plain REST saves (debounced 800 ms, and on Ctrl+S).
@@ -362,6 +369,8 @@ worktree and PR:
 | #4 | Frontend |
 | #5 | Fixes from end-to-end browser testing |
 | #6 | Collaboration rooms reload from disk after restore, rename, delete and upload |
+| #9–#11 | Security hardening: git runs as the repl uid; file operations use `openat` + `O_NOFOLLOW` |
+| #12 | Open rooms pick up edits made from the shell |
 
 The section 6 API was the contract between them. Integration needed only
 small fixes.
@@ -411,7 +420,4 @@ small fixes.
 
 ### Known gaps
 
-- Editing a file from the shell while a room is open: the open room is not
-  updated until it unloads, or until the next backend file operation calls
-  `/reload`. A file watcher in the agent that calls `/reload` would fix this.
 - No resource quotas per user, and no gVisor yet (§9).
