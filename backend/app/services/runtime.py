@@ -46,6 +46,47 @@ def _get(repl_id: str):
         return None
 
 
+def network_name(repl_id: str) -> str:
+    return f"rc-repl-{repl_id}"
+
+
+def _ensure_network(repl_id: str):
+    """Each repl gets its own bridge network that only it, nginx, and the
+    backend join. On a shared network any repl could reach every other
+    repl's unauthenticated agent (:8008) and noVNC (:6080) directly."""
+    import docker.errors
+
+    client = docker_client()
+    name = network_name(repl_id)
+    try:
+        net = client.networks.get(name)
+    except docker.errors.NotFound:
+        net = client.networks.create(name, driver="bridge", labels={"replot.repl": repl_id})
+    for gw in settings.GATEWAY_CONTAINERS.split(","):
+        gw = gw.strip()
+        if not gw:
+            continue
+        try:
+            net.connect(gw)
+        except docker.errors.APIError as e:
+            # Already connected is the common case; anything else is logged.
+            if "already exists" not in str(e):
+                log.warning("connect %s to %s: %s", gw, name, e)
+    return net
+
+
+def reconnect_gateways() -> None:
+    """After nginx/backend are recreated they lose their per-repl networks;
+    reattach them so running repls stay reachable."""
+    for net in docker_client().networks.list(filters={"label": "replot.repl"}):
+        repl_id = net.attrs.get("Labels", {}).get("replot.repl")
+        if repl_id:
+            try:
+                _ensure_network(repl_id)
+            except Exception as e:
+                log.warning("reconnect %s: %s", net.name, e)
+
+
 def _status(repl_id: str) -> str:
     c = _get(repl_id)
     if c is None:
@@ -54,14 +95,20 @@ def _status(repl_id: str) -> str:
 
 
 def _ensure_started(repl_id: str) -> None:
+    _ensure_network(repl_id)
     c = _get(repl_id)
+    if c is not None and network_name(repl_id) not in c.attrs.get("NetworkSettings", {}).get("Networks", {}):
+        # Created before per-repl networks existed; containers are disposable
+        # (files live on the host), so recreate it on its own network.
+        c.remove(force=True)
+        c = None
     if c is None:
         kwargs = dict(
             image=settings.RUNNER_IMAGE,
             name=container_name(repl_id),
             hostname=repl_id,
             detach=True,
-            network=settings.REPL_NETWORK,
+            network=network_name(repl_id),
             volumes={f"{settings.repls_host_dir}/{repl_id}": {"bind": "/home/runner/app", "mode": "rw"}},
             mem_limit="2g",
             nano_cpus=2_000_000_000,
@@ -86,9 +133,24 @@ def _stop(repl_id: str) -> None:
 
 
 def _remove(repl_id: str) -> None:
+    import docker.errors
+
     c = _get(repl_id)
     if c is not None:
         c.remove(force=True)
+    try:
+        net = docker_client().networks.get(network_name(repl_id))
+        for gw in settings.GATEWAY_CONTAINERS.split(","):
+            if gw.strip():
+                try:
+                    net.disconnect(gw.strip(), force=True)
+                except docker.errors.APIError:
+                    pass
+        net.remove()
+    except docker.errors.NotFound:
+        pass
+    except docker.errors.APIError as e:
+        log.warning("remove network for %s: %s", repl_id, e)
 
 
 async def status(repl_id: str) -> str:
@@ -192,6 +254,10 @@ async def reap_once() -> None:
 
 async def reaper_loop() -> None:
     while True:
+        try:
+            await run_in_threadpool(reconnect_gateways)
+        except Exception:
+            log.exception("reconnecting gateways failed")
         try:
             await reap_once()
         except Exception:

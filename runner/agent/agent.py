@@ -469,6 +469,9 @@ async def run_ws(request):
     await ws.prepare(request)
     client = Client(ws)
     total_clients += 1
+    # nginx sets this from the backend's auth decision. Viewers of a public
+    # repl may watch the console but not start, stop, or type into the run.
+    can_control = request.headers.get("X-Repl-Role", "") in ("owner", "editor")
     try:
         back = RUN.replay()
         if back:
@@ -482,6 +485,8 @@ async def run_ws(request):
             if not obj:
                 continue
             t = obj.get("type")
+            if t in ("input", "start", "stop") and not can_control:
+                continue
             try:
                 if t == "input":
                     RUN.input(str(obj.get("data", "")))

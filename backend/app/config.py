@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     JWT_EXPIRE_DAYS: int = 7
     CORS_ORIGINS: str = "http://localhost:5173"
     COLLAB_COMMAND_URL: str = "http://collaboration:1235"
+    # Containers attached to every per-repl network (they proxy to / poll repls).
+    GATEWAY_CONTAINERS: str = "replot-nginx,replot-backend"
 
     @property
     def repls_host_dir(self) -> str:

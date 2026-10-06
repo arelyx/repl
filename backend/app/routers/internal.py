@@ -34,7 +34,8 @@ async def auth_repl(
     if role is None or ROLE_RANK[role] < ROLE_RANK[min_role]:
         return Response(status_code=401 if user is None else 403)
     runtime.touch(repl.id)
-    return Response(status_code=204)
+    # nginx forwards this to the agent, which ignores Run controls from viewers.
+    return Response(status_code=204, headers={"X-Repl-Role": role})
 
 
 @router.get("/collab-auth")
