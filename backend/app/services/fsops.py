@@ -1,0 +1,208 @@
+"""Filesystem helpers for repl working trees. Blocking; call via run_in_threadpool."""
+import base64
+import io
+import os
+import shutil
+import tomllib
+import zipfile
+from pathlib import Path
+
+from fastapi import HTTPException
+
+from app.config import settings
+
+RUNNER_UID = 1000
+RUNNER_GID = 1000
+SKIP_DESCEND = {
+    "node_modules", "__pycache__", "target", ".venv", "venv", "bin", "obj", ".gradle", "build",
+    ".mypy_cache", ".pytest_cache", "dist", ".next",
+}
+MAX_LIST = 5000
+
+
+def repl_root(repl_id: str) -> Path:
+    return Path(settings.REPLS_DIR) / repl_id
+
+
+def chown_tree(path: str | Path) -> None:
+    path = str(path)
+    try:
+        os.lchown(path, RUNNER_UID, RUNNER_GID)
+        for dirpath, dirnames, filenames in os.walk(path):
+            for n in dirnames + filenames:
+                try:
+                    os.lchown(os.path.join(dirpath, n), RUNNER_UID, RUNNER_GID)
+                except OSError:
+                    pass
+    except (PermissionError, FileNotFoundError):
+        pass  # not root (local dev) -- ignore
+
+
+def chown_one(path: str | Path) -> None:
+    try:
+        os.lchown(str(path), RUNNER_UID, RUNNER_GID)
+    except (PermissionError, FileNotFoundError):
+        pass
+
+
+def safe_path(repl_id: str, rel: str, allow_root: bool = False) -> Path:
+    root = repl_root(repl_id).resolve()
+    rel = (rel or "").replace("\\", "/").strip()
+    while rel.startswith("./"):
+        rel = rel[2:]
+    rel = rel.strip("/")
+    if not rel:
+        if allow_root:
+            return root
+        raise HTTPException(status_code=400, detail="Path required")
+    if "\0" in rel:
+        raise HTTPException(status_code=400, detail="Invalid path")
+    parts = rel.split("/")
+    if any(p in ("", ".", "..") for p in parts) or parts[0] == ".git":
+        raise HTTPException(status_code=400, detail="Invalid path")
+    if ".git" in parts:
+        raise HTTPException(status_code=400, detail="Invalid path")
+    candidate = root / rel
+    # resolve parent (target itself may be a symlink we're deleting/overwriting)
+    resolved = candidate.resolve()
+    if resolved != root and root not in resolved.parents:
+        raise HTTPException(status_code=400, detail="Path escapes repl")
+    return candidate
+
+
+def list_files(repl_id: str) -> list[dict]:
+    root = repl_root(repl_id)
+    out: list[dict] = []
+    for dirpath, dirnames, filenames in os.walk(root):
+        rel_dir = os.path.relpath(dirpath, root)
+        rel_dir = "" if rel_dir == "." else rel_dir
+        keep = []
+        for d in sorted(dirnames):
+            if d == ".git":
+                continue
+            full = os.path.join(dirpath, d)
+            relp = f"{rel_dir}/{d}" if rel_dir else d
+            out.append({"path": relp, "type": "dir", "size": 0})
+            if d in SKIP_DESCEND or os.path.islink(full):
+                continue
+            keep.append(d)
+        dirnames[:] = keep
+        for f in filenames:
+            full = os.path.join(dirpath, f)
+            relp = f"{rel_dir}/{f}" if rel_dir else f
+            try:
+                size = os.lstat(full).st_size
+            except OSError:
+                size = 0
+            out.append({"path": relp, "type": "file", "size": size})
+        if len(out) > MAX_LIST:
+            break
+    out.sort(key=lambda n: n["path"])
+    return out
+
+
+def read_file(repl_id: str, rel: str) -> dict:
+    p = safe_path(repl_id, rel)
+    if not p.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+    data = p.read_bytes()
+    try:
+        return {"path": rel, "content": data.decode("utf-8"), "encoding": "utf-8"}
+    except UnicodeDecodeError:
+        return {"path": rel, "content": base64.b64encode(data).decode(), "encoding": "base64"}
+
+
+def read_text(repl_id: str, rel: str) -> str:
+    p = safe_path(repl_id, rel)
+    if not p.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+    return p.read_bytes().decode("utf-8", errors="replace")
+
+
+def _mkparents(p: Path) -> None:
+    root = p.parent
+    missing = []
+    while not root.exists():
+        missing.append(root)
+        root = root.parent
+    p.parent.mkdir(parents=True, exist_ok=True)
+    for d in missing:
+        chown_one(d)
+
+
+def write_file(repl_id: str, rel: str, data: bytes) -> int:
+    p = safe_path(repl_id, rel)
+    if p.is_dir():
+        raise HTTPException(status_code=400, detail="Path is a directory")
+    _mkparents(p)
+    p.write_bytes(data)
+    chown_one(p)
+    return len(data)
+
+
+def create_node(repl_id: str, rel: str, kind: str) -> None:
+    p = safe_path(repl_id, rel)
+    if p.exists():
+        raise HTTPException(status_code=409, detail="Already exists")
+    _mkparents(p)
+    if kind == "dir":
+        p.mkdir()
+    else:
+        p.touch()
+    chown_one(p)
+
+
+def rename_node(repl_id: str, src: str, dst: str) -> None:
+    a = safe_path(repl_id, src)
+    b = safe_path(repl_id, dst)
+    if not a.exists() and not a.is_symlink():
+        raise HTTPException(status_code=404, detail="Source not found")
+    if b.exists():
+        raise HTTPException(status_code=409, detail="Destination exists")
+    _mkparents(b)
+    os.rename(a, b)
+
+
+def delete_node(repl_id: str, rel: str) -> None:
+    p = safe_path(repl_id, rel)
+    if p.is_symlink() or p.is_file():
+        p.unlink()
+    elif p.is_dir():
+        shutil.rmtree(p)
+    else:
+        raise HTTPException(status_code=404, detail="Not found")
+
+
+def zip_repl(repl_id: str) -> bytes:
+    root = repl_root(repl_id)
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for dirpath, dirnames, filenames in os.walk(root):
+            dirnames[:] = [d for d in dirnames if d != ".git" and not os.path.islink(os.path.join(dirpath, d))]
+            for f in filenames:
+                full = os.path.join(dirpath, f)
+                if os.path.islink(full):
+                    continue
+                zf.write(full, os.path.relpath(full, root))
+    return buf.getvalue()
+
+
+def parse_replit(path: Path) -> dict:
+    cfg = {"run": None, "entrypoint": None, "gui": False, "port": None, "language": None}
+    f = path / ".replit"
+    try:
+        data = tomllib.loads(f.read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError, UnicodeDecodeError):
+        return cfg
+    if isinstance(data.get("run"), str):
+        cfg["run"] = data["run"]
+    elif isinstance(data.get("run"), list):
+        cfg["run"] = " ".join(str(x) for x in data["run"])
+    if isinstance(data.get("entrypoint"), str):
+        cfg["entrypoint"] = data["entrypoint"]
+    cfg["gui"] = bool(data.get("gui", False))
+    if isinstance(data.get("port"), int):
+        cfg["port"] = data["port"]
+    if isinstance(data.get("language"), str):
+        cfg["language"] = data["language"]
+    return cfg
