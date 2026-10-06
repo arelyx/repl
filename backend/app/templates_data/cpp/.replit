@@ -1,0 +1,4 @@
+run = "g++ -std=c++17 -O2 -o main main.cpp && ./main"
+language = "cpp"
+entrypoint = "main.cpp"
+gui = false

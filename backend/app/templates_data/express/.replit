@@ -1,0 +1,5 @@
+run = "npm install --no-audit --no-fund && node index.js"
+language = "javascript"
+entrypoint = "index.js"
+gui = false
+port = 3000

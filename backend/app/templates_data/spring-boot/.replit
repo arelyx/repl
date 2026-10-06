@@ -1,0 +1,5 @@
+run = "mvn -q spring-boot:run"
+language = "java"
+entrypoint = "src/main/java/com/example/demo/DemoApplication.java"
+gui = false
+port = 8080

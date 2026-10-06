@@ -1,0 +1,4 @@
+run = "gfortran -o main main.f90 && ./main"
+language = "fortran"
+entrypoint = "main.f90"
+gui = false

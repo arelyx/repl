@@ -1,0 +1,5 @@
+run = "python3 -m http.server 8000 --bind 0.0.0.0"
+language = "html"
+entrypoint = "index.html"
+gui = false
+port = 8000

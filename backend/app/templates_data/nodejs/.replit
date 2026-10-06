@@ -1,0 +1,4 @@
+run = "node index.js"
+language = "javascript"
+entrypoint = "index.js"
+gui = false

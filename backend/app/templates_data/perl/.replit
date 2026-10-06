@@ -1,0 +1,4 @@
+run = "perl main.pl"
+language = "perl"
+entrypoint = "main.pl"
+gui = false

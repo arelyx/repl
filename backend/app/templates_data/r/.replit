@@ -1,0 +1,4 @@
+run = "Rscript main.r"
+language = "r"
+entrypoint = "main.r"
+gui = false

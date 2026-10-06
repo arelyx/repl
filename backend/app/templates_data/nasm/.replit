@@ -1,0 +1,4 @@
+run = "nasm -f elf64 -o main.o main.asm && ld -o main main.o && ./main"
+language = "nasm"
+entrypoint = "main.asm"
+gui = false

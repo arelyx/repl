@@ -1,0 +1,5 @@
+run = "go run ."
+language = "go"
+entrypoint = "main.go"
+gui = false
+port = 8000

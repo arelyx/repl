@@ -1,0 +1,4 @@
+run = "php main.php"
+language = "php"
+entrypoint = "main.php"
+gui = false

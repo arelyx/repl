@@ -1,0 +1,4 @@
+run = "lua5.4 main.lua"
+language = "lua"
+entrypoint = "main.lua"
+gui = false
