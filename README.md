@@ -55,6 +55,15 @@ docker compose up -d --build
 Previews rely on `*.localhost` resolving to loopback, which Chrome, Firefox and
 Safari all do with no setup.
 
+### Development mode
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d   # backend + collab auto-reload
+cd frontend && npm ci && npx vite --port 5173                         # SPA with HMR on :5173
+```
+
+The Vite dev server proxies `/api`, `/ws` and `/collab` to nginx on :8380.
+
 End-to-end test through nginx (requires `pip install aiohttp`):
 
 ```bash
