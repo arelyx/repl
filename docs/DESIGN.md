@@ -129,7 +129,12 @@ port = 8000                       # template hint: default web preview port
 ## 5. Container runtime
 
 - Image: `replit-polyglot:latest` (`runner/Dockerfile`).
-- Container name `repl-{id}`, network `rc-repls`, labels `replot.repl={id}`.
+- Container name `repl-{id}`, labels `replot.repl={id}`. Each repl gets its own
+  bridge network `rc-repl-{id}`, which only the repl, nginx, and the backend
+  join. On a shared network every repl could reach every other repl's
+  unauthenticated agent and noVNC. The backend reattaches nginx and itself
+  to these networks every minute, because recreating those containers drops
+  the attachments.
 - Mount `${REPLS_HOST_DIR}/{id}` → `/home/runner/app`.
 - Limits: `mem_limit=2g`, `nano_cpus=2e9`, `pids_limit=1024`, `cap_drop=ALL`
   (only `CHOWN`, `SETUID`, `SETGID`, `DAC_OVERRIDE` are added back),
@@ -292,9 +297,19 @@ tab opens. For `gui = true` templates, Run focuses Display.
   sandbox: anyone who can break out of runc reaches a host with the Docker
   socket mounted in the backend. Production should use gVisor (`--runtime=runsc`),
   which is a single config switch (`REPL_RUNTIME`).
-- Repl containers sit on their own `rc-repls` bridge network. They can reach
-  the internet (for `pip install` and `npm install`) but not postgres, which
+- Each repl has its own bridge network (§5). Repls can reach the internet (for
+  `pip install` and `npm install`) but not each other, and not postgres, which
   sits on `rc-internal`.
+- The preview proxy refuses ports 8008, 6080, and 5900, the agent and VNC.
+- Previews are a different *origin* from the app but the same *site*, so
+  SameSite=Lax cookies are still sent from preview pages. nginx therefore
+  refuses any request to the app whose `Origin` is a preview host.
+- The console auth subrequest parses the raw URI, while `proxy_pass` uses the
+  normalized one. nginx refuses `/ws/` URIs containing dot segments or encoded
+  separators, so the two can never name different repls.
+- nginx passes the caller's role (`X-Repl-Role`, from the auth subrequest) to
+  the agent. Viewers can watch the console of a public repl, but the agent
+  drops their start, stop, and stdin.
 - **git never runs as root.** Repl users have a shell next to `.git`, so
   `.git/config` and `.gitattributes` are attacker-controlled: `core.fsmonitor`,
   hooks, and filter drivers can all run commands. The backend holds the Docker
@@ -310,8 +325,9 @@ tab opens. For `gui = true` templates, Run focuses Display.
   directory for a symlink between the check and the backend's root `open` and
   read something like `/proc/self/environ`. Create, rename, and delete use
   the same walk with `mkdirat`, `renameat`, `unlinkat`, and fd-based `rmtree`.
-- Previews are served on a different origin (`*.preview.localhost`) from the
-  app, so user JavaScript cannot read the auth cookie or call the API with it.
+- Previews are served on a different origin (`*.preview.localhost`), so user
+  JavaScript cannot read the auth cookie (it is httpOnly anyway). See the
+  Origin check above for requests that carry the cookie.
 
 ## 10. Templates
 
@@ -371,6 +387,7 @@ worktree and PR:
 | #6 | Collaboration rooms reload from disk after restore, rename, delete and upload |
 | #9–#11 | Security hardening: git runs as the repl uid; file operations use `openat` + `O_NOFOLLOW` |
 | #12 | Open rooms pick up edits made from the shell |
+| #14 | Gateway hardening from a code review: per-repl networks, preview port blocklist, Origin and dot-segment checks, viewer-only console |
 
 The section 6 API was the contract between them. Integration needed only
 small fixes.
