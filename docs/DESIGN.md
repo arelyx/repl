@@ -238,6 +238,14 @@ stays the source of truth: when the last client leaves, the room unloads, and
 the next open reloads from disk, which picks up anything the user changed
 from the shell.
 
+Some operations change files outside the editor: git restore, rename, delete,
+upload, and REST saves. After each one the backend calls
+`POST collaboration:1235/reload {repl_id}` (shared-secret header). The
+collaboration server re-reads every open room of that repl from disk. Text
+that changed is replaced in a single Yjs transaction, so connected editors
+update live. Rooms whose file is gone are closed, and their pending stores are
+dropped so they can't bring the file back.
+
 The frontend binds Monaco with `y-monaco` and shows remote cursors with
 awareness (name and color). If the collaboration socket cannot connect within 3 s,
 the editor falls back to plain REST saves (debounced 800 ms, and on Ctrl+S).
@@ -340,6 +348,7 @@ worktree and PR:
 | #3 | Runner agent and 35 templates |
 | #4 | Frontend |
 | #5 | Fixes from end-to-end browser testing |
+| #6 | Collaboration rooms reload from disk after restore, rename, delete and upload |
 
 The section 6 API was the contract between them. Integration needed only
 small fixes.
@@ -389,10 +398,7 @@ small fixes.
 
 ### Known gaps
 
-- Restoring while another user has the file open: that user's Yjs room keeps
-  the old text until it unloads, and its next save would overwrite the restore.
-  The fix is for the backend to tell the collaboration server to close the
-  room, as PlottedPlant's `close-room` command does.
 - Editing a file from the shell while a room is open: the open room is not
-  updated until it unloads.
+  updated until it unloads, or until the next backend file operation calls
+  `/reload`. A file watcher in the agent that calls `/reload` would fix this.
 - No resource quotas per user, and no gVisor yet (§9).
