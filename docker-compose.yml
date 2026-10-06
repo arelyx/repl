@@ -1,0 +1,77 @@
+# Replot: docker compose up -d --build
+# Requires the runner image first: docker build -t replit-polyglot:latest runner/
+
+name: replot
+
+services:
+  nginx:
+    build:
+      context: .
+      dockerfile: nginx/Dockerfile
+    container_name: replot-nginx
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${HTTP_PORT:-8380}:80"
+    networks: [internal, repls]
+    depends_on: [backend, collaboration]
+
+  backend:
+    build: ./backend
+    container_name: replot-backend
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
+      - INTERNAL_SECRET=${INTERNAL_SECRET}
+      - REPLS_DIR=${REPLS_HOST_DIR}
+      - REPLS_HOST_DIR=${REPLS_HOST_DIR}
+      - RUNNER_IMAGE=${RUNNER_IMAGE:-replit-polyglot:latest}
+      - REPL_NETWORK=rc-repls
+      - REPL_RUNTIME=${REPL_RUNTIME:-}
+      - PUBLIC_HOST=${PUBLIC_HOST:-localhost:8380}
+      - IDLE_TIMEOUT_MINUTES=${IDLE_TIMEOUT_MINUTES:-30}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Same absolute path inside and out, so paths handed to the Docker
+      # daemon for repl bind mounts are valid host paths.
+      - ${REPLS_HOST_DIR}:${REPLS_HOST_DIR}
+    networks: [internal, repls]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  collaboration:
+    build: ./collaboration
+    container_name: replot-collaboration
+    restart: unless-stopped
+    environment:
+      - BACKEND_URL=http://backend:8000
+      - INTERNAL_SECRET=${INTERNAL_SECRET}
+    networks: [internal]
+
+  postgres:
+    image: postgres:18.2-alpine
+    container_name: replot-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=${POSTGRES_DB}
+    volumes:
+      - pgdata:/var/lib/postgresql
+    networks: [internal]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+networks:
+  internal:
+    name: rc-internal
+  # Repl containers live here; nginx and backend join it to reach them by name.
+  repls:
+    name: rc-repls
+
+volumes:
+  pgdata:

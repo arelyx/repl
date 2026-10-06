@@ -34,7 +34,7 @@ RUN curl -fsSL -o /tmp/kotlin.zip https://github.com/JetBrains/kotlin/releases/d
     && ln -s /opt/kotlinc/bin/kotlinc /usr/local/bin/kotlinc && ln -s /opt/kotlinc/bin/kotlin /usr/local/bin/kotlin
 
 # Common Python packages so ad-hoc web servers start instantly
-RUN pip3 install --break-system-packages --no-cache-dir \
+RUN pip3 install --break-system-packages --ignore-installed --no-cache-dir \
       flask fastapi "uvicorn[standard]" django requests numpy pygame aiohttp
 
 # The unprivileged user code runs as (uid 1000 matches the host data dir owner)
