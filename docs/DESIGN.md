@@ -134,7 +134,9 @@ port = 8000                       # template hint: default web preview port
   join. On a shared network every repl could reach every other repl's
   unauthenticated agent and noVNC. The backend reattaches nginx and itself
   to these networks every minute, because recreating those containers drops
-  the attachments.
+  the attachments. Docker's default address pools run out after a few dozen
+  networks, so each repl network gets a /28 carved from `REPL_SUBNET_POOL`
+  (default `10.213.0.0/16`, room for 4096 running repls).
 - Mount `${REPLS_HOST_DIR}/{id}` → `/home/runner/app`.
 - Limits: `mem_limit=2g`, `nano_cpus=2e9`, `pids_limit=1024`, `cap_drop=ALL`
   (only `CHOWN`, `SETUID`, `SETGID`, `DAC_OVERRIDE` are added back),
@@ -142,8 +144,10 @@ port = 8000                       # template hint: default web preview port
 - Entrypoint (`/opt/replagent/entrypoint.sh`) starts Xvfb `:0` (960x600),
   fluxbox, x11vnc (`-forever -shared -nopw`, localhost only), websockify `:6080`
   serving `/usr/share/novnc`, then the agent on `:8008`.
-- Lifecycle: `POST /repls/{id}/start` creates or starts the container and waits
-  until the agent's `/health` answers. Opening a repl calls start. A reaper
+- Lifecycle: `POST /repls/{id}/start` creates the network and container, then
+  waits until the agent's `/health` answers. Startup takes about 0.6 s, so
+  containers are disposable: stopping a repl removes the container and its
+  network, and only the files on disk persist. Opening a repl calls start. A reaper
   stops containers idle for more than `IDLE_TIMEOUT_MINUTES` (default 30) with no
   agent WebSocket clients.
 
@@ -387,6 +391,8 @@ worktree and PR:
 | #6 | Collaboration rooms reload from disk after restore, rename, delete and upload |
 | #9–#11 | Security hardening: git runs as the repl uid; file operations use `openat` + `O_NOFOLLOW` |
 | #12 | Open rooms pick up edits made from the shell |
+| #15, #16 | Review fixes: symlink and FIFO races in zip, fork and chown; a diff that no longer touches the index; agent backpressure |
+| #17 | Per-repl /28 subnets from a dedicated pool; stopping a repl frees its container and network |
 | #14 | Gateway hardening from a code review: per-repl networks, preview port blocklist, Origin and dot-segment checks, viewer-only console |
 
 The section 6 API was the contract between them. Integration needed only

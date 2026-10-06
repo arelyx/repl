@@ -61,7 +61,7 @@ def _ensure_network(repl_id: str):
     try:
         net = client.networks.get(name)
     except docker.errors.NotFound:
-        net = client.networks.create(name, driver="bridge", labels={"replot.repl": repl_id})
+        net = _create_network(name, repl_id)
     for gw in settings.GATEWAY_CONTAINERS.split(","):
         gw = gw.strip()
         if not gw:
@@ -73,6 +73,34 @@ def _ensure_network(repl_id: str):
             if "already exists" not in str(e):
                 log.warning("connect %s to %s: %s", gw, name, e)
     return net
+
+
+def _create_network(name: str, repl_id: str):
+    """Docker's default address pools run out after a few dozen networks, so
+    carve a /28 per repl out of REPL_SUBNET_POOL ourselves."""
+    import ipaddress
+
+    import docker.errors
+    from docker.types import IPAMConfig, IPAMPool
+
+    client = docker_client()
+    pool = ipaddress.ip_network(settings.REPL_SUBNET_POOL)
+    used = set()
+    for net in client.networks.list(filters={"label": "replot.repl"}):
+        for cfg in (net.attrs.get("IPAM") or {}).get("Config") or []:
+            if cfg.get("Subnet"):
+                used.add(cfg["Subnet"])
+    for subnet in pool.subnets(new_prefix=28):
+        if str(subnet) in used:
+            continue
+        ipam = IPAMConfig(pool_configs=[IPAMPool(subnet=str(subnet))])
+        try:
+            return client.networks.create(name, driver="bridge", ipam=ipam, labels={"replot.repl": repl_id})
+        except docker.errors.APIError as e:
+            if "overlap" in str(e) or "already" in str(e):
+                continue  # raced with another create, or taken outside our labels
+            raise
+    raise RuntimeError("No free subnets left for repl networks")
 
 
 def reconnect_gateways() -> None:
@@ -89,9 +117,8 @@ def reconnect_gateways() -> None:
 
 def _status(repl_id: str) -> str:
     c = _get(repl_id)
-    if c is None:
-        return "missing"
-    return "running" if c.status == "running" else "stopped"
+    # No container is the normal resting state: _stop() removes it.
+    return "running" if c is not None and c.status == "running" else "stopped"
 
 
 def _ensure_started(repl_id: str) -> None:
@@ -127,9 +154,12 @@ def _ensure_started(repl_id: str) -> None:
 
 
 def _stop(repl_id: str) -> None:
+    # Containers are disposable (files live on the host), so a stopped repl
+    # gives back its container and its network/subnet; start recreates both.
     c = _get(repl_id)
     if c is not None and c.status == "running":
         c.stop(timeout=5)
+    _remove(repl_id)
 
 
 def _remove(repl_id: str) -> None:
