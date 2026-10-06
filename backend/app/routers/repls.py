@@ -8,7 +8,7 @@ from starlette.concurrency import run_in_threadpool
 from app.database import get_db
 from app.models import Repl, ReplCollaborator, User
 from app.schemas import ForkIn, ReplCreate, ReplUpdate
-from app.security import get_current_user
+from app.security import get_current_user, get_optional_user
 from app.services import fsops, gitops, runtime
 from app.services.repls import (
     TEMPLATES_DIR,
@@ -38,9 +38,12 @@ async def my_repls(user: User = Depends(get_current_user), db: AsyncSession = De
 
 
 @router.get("/explore")
-async def explore(db: AsyncSession = Depends(get_db)):
+async def explore(
+    db: AsyncSession = Depends(get_db),
+    user: User | None = Depends(get_optional_user),
+):
     res = await db.execute(select(Repl).where(Repl.is_public.is_(True)).order_by(Repl.updated_at.desc()).limit(100))
-    return [repl_out(r, "viewer") for r in res.scalars().all()]
+    return [repl_out(r, "owner" if user and r.owner_id == user.id else "viewer") for r in res.scalars().all()]
 
 
 async def _unique_id(db: AsyncSession) -> str:

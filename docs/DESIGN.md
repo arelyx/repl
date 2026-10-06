@@ -134,7 +134,7 @@ port = 8000                       # template hint: default web preview port
 - Limits: `mem_limit=2g`, `nano_cpus=2e9`, `pids_limit=1024`, `cap_drop=ALL`
   (only `CHOWN`, `SETUID`, `SETGID`, `DAC_OVERRIDE` are added back),
   `security_opt=no-new-privileges`.
-- Entrypoint (`/opt/replagent/entrypoint.sh`) starts Xvfb `:0` (1280x720),
+- Entrypoint (`/opt/replagent/entrypoint.sh`) starts Xvfb `:0` (960x600),
   fluxbox, x11vnc (`-forever -shared -nopw`, localhost only), websockify `:6080`
   serving `/usr/share/novnc`, then the agent on `:8008`.
 - Lifecycle: `POST /repls/{id}/start` creates or starts the container and waits
