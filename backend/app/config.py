@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     COLLAB_COMMAND_URL: str = "http://collaboration:1235"
     # Containers attached to every per-repl network (they proxy to / poll repls).
     GATEWAY_CONTAINERS: str = "replot-nginx,replot-backend"
+    # Address space for per-repl /28 networks (4096 repls in a /16).
+    REPL_SUBNET_POOL: str = "10.213.0.0/16"
 
     @property
     def repls_host_dir(self) -> str:
