@@ -268,11 +268,21 @@ class Client:
             except Exception:
                 return
 
+    # Messages buffered for a client that isn't reading. A stalled viewer
+    # must not grow the agent's memory until the container is OOM-killed.
+    MAX_QUEUED = 2000
+
     def send(self, obj):
+        if self.queue.qsize() >= self.MAX_QUEUED:
+            self.close()
+            return
         self.queue.put_nowait(json.dumps(obj))
 
     def close(self):
-        self.queue.put_nowait(None)
+        if self.task.done():
+            return
+        self.task.cancel()
+        asyncio.ensure_future(self.ws.close())
 
 
 # ---------------------------------------------------------------- run manager
