@@ -14,7 +14,7 @@ export function DisplayPane() {
   return (
     <div className="flex h-full flex-col">
       <div className="flex h-8 shrink-0 items-center gap-2 border-b px-2 text-xs text-muted-foreground">
-        <Monitor className="size-3.5" /> Display (1280×720)
+        <Monitor className="size-3.5" /> Display (960×600)
         <Button variant="ghost" size="xs" className="ml-auto" onClick={() => setNonce((n) => n + 1)}>
           <RotateCw /> Reload
         </Button>
