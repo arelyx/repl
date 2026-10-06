@@ -7,6 +7,7 @@ import shutil
 import stat
 import tomllib
 import zipfile
+from contextlib import contextmanager
 from pathlib import Path
 
 from fastapi import HTTPException
@@ -65,9 +66,11 @@ def safe_path(repl_id: str, rel: str, allow_root: bool = False) -> Path:
     if ".git" in parts:
         raise HTTPException(status_code=400, detail="Invalid path")
     candidate = root / rel
-    # resolve parent (target itself may be a symlink we're deleting/overwriting)
-    resolved = candidate.resolve()
-    if resolved != root and root not in resolved.parents:
+    # Resolve only the parent: the target itself may be a symlink the user
+    # wants to delete or rename. Opening through it is refused later by
+    # O_NOFOLLOW in _parent_beneath / _open_beneath.
+    parent = candidate.parent.resolve()
+    if parent != root and root not in parent.parents:
         raise HTTPException(status_code=400, detail="Path escapes repl")
     return candidate
 
@@ -103,41 +106,56 @@ def list_files(repl_id: str) -> list[dict]:
     return out
 
 
-def _open_beneath(repl_id: str, rel: str, flags: int, create_parents: bool = False) -> int:
-    """Open `rel` under the repl root without following any symlink.
+@contextmanager
+def _parent_beneath(repl_id: str, rel: str, create_parents: bool = False):
+    """Yield (dir_fd, name) for `rel`'s parent directory under the repl root,
+    reached without following any symlink.
 
     safe_path() checks the resolved path, but the repl user can swap a path
-    component for a symlink between that check and our (root) open, e.g.
+    component for a symlink between that check and our (root) syscall, e.g.
     to read /proc/self/environ. Walking component by component with
-    O_NOFOLLOW relative to the parent's fd closes that race.
+    O_NOFOLLOW relative to the parent's fd closes that race; callers then use
+    *at() syscalls on (dir_fd, name).
     """
     safe_path(repl_id, rel)
-    parts = rel.replace("\\", "/").strip().strip("/").split("/")
-    parts = [p for p in parts if p not in ("", ".")]
+    parts = [p for p in rel.replace("\\", "/").strip().strip("/").split("/") if p not in ("", ".")]
     dir_fd = os.open(repl_root(repl_id), os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
     try:
-        for name in parts[:-1]:
-            try:
-                nxt = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=dir_fd)
-            except FileNotFoundError:
-                if not create_parents:
-                    raise
-                os.mkdir(name, 0o755, dir_fd=dir_fd)
-                os.chown(name, RUNNER_UID, RUNNER_GID, dir_fd=dir_fd, follow_symlinks=False)
-                nxt = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=dir_fd)
-            os.close(dir_fd)
-            dir_fd = nxt
-        return os.open(parts[-1], flags | os.O_NOFOLLOW, 0o644, dir_fd=dir_fd)
-    except (FileNotFoundError, NotADirectoryError):
-        raise HTTPException(status_code=404, detail="File not found")
-    except OSError as e:
-        if e.errno == errno.ELOOP:
-            raise HTTPException(status_code=400, detail="Refusing to follow a symlink")
-        if e.errno == errno.EISDIR:
-            raise HTTPException(status_code=400, detail="Path is a directory")
-        raise
+        try:
+            for name in parts[:-1]:
+                try:
+                    nxt = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=dir_fd)
+                except FileNotFoundError:
+                    if not create_parents:
+                        raise
+                    os.mkdir(name, 0o755, dir_fd=dir_fd)
+                    os.chown(name, RUNNER_UID, RUNNER_GID, dir_fd=dir_fd, follow_symlinks=False)
+                    nxt = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=dir_fd)
+                os.close(dir_fd)
+                dir_fd = nxt
+        except (FileNotFoundError, NotADirectoryError):
+            raise HTTPException(status_code=404, detail="Not found")
+        except OSError as e:
+            if e.errno == errno.ELOOP:
+                raise HTTPException(status_code=400, detail="Refusing to follow a symlink")
+            raise
+        yield dir_fd, parts[-1]
     finally:
         os.close(dir_fd)
+
+
+def _open_beneath(repl_id: str, rel: str, flags: int, create_parents: bool = False) -> int:
+    with _parent_beneath(repl_id, rel, create_parents) as (dir_fd, name):
+        try:
+            return os.open(name, flags | os.O_NOFOLLOW, 0o644, dir_fd=dir_fd)
+        except (FileNotFoundError, NotADirectoryError):
+            raise HTTPException(status_code=404, detail="File not found")
+        except OSError as e:
+            if e.errno == errno.ELOOP:
+                raise HTTPException(status_code=400, detail="Refusing to follow a symlink")
+            if e.errno == errno.EISDIR:
+                raise HTTPException(status_code=400, detail="Path is a directory")
+            raise
 
 
 def _read_bytes(repl_id: str, rel: str) -> bytes:
@@ -160,17 +178,6 @@ def read_text(repl_id: str, rel: str) -> str:
     return _read_bytes(repl_id, rel).decode("utf-8", errors="replace")
 
 
-def _mkparents(p: Path) -> None:
-    root = p.parent
-    missing = []
-    while not root.exists():
-        missing.append(root)
-        root = root.parent
-    p.parent.mkdir(parents=True, exist_ok=True)
-    for d in missing:
-        chown_one(d)
-
-
 def write_file(repl_id: str, rel: str, data: bytes) -> int:
     fd = _open_beneath(repl_id, rel, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, create_parents=True)
     with os.fdopen(fd, "wb") as f:
@@ -180,36 +187,46 @@ def write_file(repl_id: str, rel: str, data: bytes) -> int:
 
 
 def create_node(repl_id: str, rel: str, kind: str) -> None:
-    p = safe_path(repl_id, rel)
-    if p.exists():
-        raise HTTPException(status_code=409, detail="Already exists")
-    _mkparents(p)
-    if kind == "dir":
-        p.mkdir()
-    else:
-        p.touch()
-    chown_one(p)
+    with _parent_beneath(repl_id, rel, create_parents=True) as (dir_fd, name):
+        try:
+            if kind == "dir":
+                os.mkdir(name, 0o755, dir_fd=dir_fd)
+            else:
+                os.close(os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o644, dir_fd=dir_fd))
+        except FileExistsError:
+            raise HTTPException(status_code=409, detail="Already exists")
+        os.chown(name, RUNNER_UID, RUNNER_GID, dir_fd=dir_fd, follow_symlinks=False)
+
+
+def _exists_at(dir_fd: int, name: str) -> bool:
+    try:
+        os.stat(name, dir_fd=dir_fd, follow_symlinks=False)
+        return True
+    except FileNotFoundError:
+        return False
 
 
 def rename_node(repl_id: str, src: str, dst: str) -> None:
-    a = safe_path(repl_id, src)
-    b = safe_path(repl_id, dst)
-    if not a.exists() and not a.is_symlink():
-        raise HTTPException(status_code=404, detail="Source not found")
-    if b.exists():
-        raise HTTPException(status_code=409, detail="Destination exists")
-    _mkparents(b)
-    os.rename(a, b)
+    with _parent_beneath(repl_id, src) as (src_fd, src_name), \
+            _parent_beneath(repl_id, dst, create_parents=True) as (dst_fd, dst_name):
+        if not _exists_at(src_fd, src_name):
+            raise HTTPException(status_code=404, detail="Source not found")
+        if _exists_at(dst_fd, dst_name):
+            raise HTTPException(status_code=409, detail="Destination exists")
+        os.rename(src_name, dst_name, src_dir_fd=src_fd, dst_dir_fd=dst_fd)
 
 
 def delete_node(repl_id: str, rel: str) -> None:
-    p = safe_path(repl_id, rel)
-    if p.is_symlink() or p.is_file():
-        p.unlink()
-    elif p.is_dir():
-        shutil.rmtree(p)
-    else:
-        raise HTTPException(status_code=404, detail="Not found")
+    with _parent_beneath(repl_id, rel) as (dir_fd, name):
+        try:
+            st = os.stat(name, dir_fd=dir_fd, follow_symlinks=False)
+        except FileNotFoundError:
+            raise HTTPException(status_code=404, detail="Not found")
+        if stat.S_ISDIR(st.st_mode):
+            # rmtree with dir_fd never follows symlinks inside the tree.
+            shutil.rmtree(name, dir_fd=dir_fd)
+        else:
+            os.unlink(name, dir_fd=dir_fd)
 
 
 def zip_repl(repl_id: str) -> bytes:
