@@ -1,4 +1,6 @@
+import os
 import shutil
+import subprocess
 
 from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy import select
@@ -129,7 +131,17 @@ async def delete_repl(ctx=Depends(require_role("owner")), db: AsyncSession = Dep
 
 
 def _fork_copy(src: str, dest: str) -> None:
-    shutil.copytree(src, dest, symlinks=True)
+    # The source tree is controlled by its repl user, who can swap entries for
+    # symlinks mid-copy. Copy as the unprivileged repl uid (no docker group),
+    # so even a followed symlink can only reach what that uid could read.
+    os.mkdir(dest, 0o755)
+    os.chown(dest, fsops.RUNNER_UID, fsops.RUNNER_GID)
+    subprocess.run(
+        ["cp", "-a", "--no-dereference", "--", src + "/.", dest],
+        user=fsops.RUNNER_UID, group=fsops.RUNNER_GID, extra_groups=[],
+        env={"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8"},
+        check=True, capture_output=True, timeout=300,
+    )
     fsops.chown_tree(dest)
 
 
