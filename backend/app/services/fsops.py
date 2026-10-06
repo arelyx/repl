@@ -1,8 +1,10 @@
 """Filesystem helpers for repl working trees. Blocking; call via run_in_threadpool."""
 import base64
+import errno
 import io
 import os
 import shutil
+import stat
 import tomllib
 import zipfile
 from pathlib import Path
@@ -101,11 +103,53 @@ def list_files(repl_id: str) -> list[dict]:
     return out
 
 
-def read_file(repl_id: str, rel: str) -> dict:
-    p = safe_path(repl_id, rel)
-    if not p.is_file():
+def _open_beneath(repl_id: str, rel: str, flags: int, create_parents: bool = False) -> int:
+    """Open `rel` under the repl root without following any symlink.
+
+    safe_path() checks the resolved path, but the repl user can swap a path
+    component for a symlink between that check and our (root) open, e.g.
+    to read /proc/self/environ. Walking component by component with
+    O_NOFOLLOW relative to the parent's fd closes that race.
+    """
+    safe_path(repl_id, rel)
+    parts = rel.replace("\\", "/").strip().strip("/").split("/")
+    parts = [p for p in parts if p not in ("", ".")]
+    dir_fd = os.open(repl_root(repl_id), os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    try:
+        for name in parts[:-1]:
+            try:
+                nxt = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=dir_fd)
+            except FileNotFoundError:
+                if not create_parents:
+                    raise
+                os.mkdir(name, 0o755, dir_fd=dir_fd)
+                os.chown(name, RUNNER_UID, RUNNER_GID, dir_fd=dir_fd, follow_symlinks=False)
+                nxt = os.open(name, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=dir_fd)
+            os.close(dir_fd)
+            dir_fd = nxt
+        return os.open(parts[-1], flags | os.O_NOFOLLOW, 0o644, dir_fd=dir_fd)
+    except (FileNotFoundError, NotADirectoryError):
         raise HTTPException(status_code=404, detail="File not found")
-    data = p.read_bytes()
+    except OSError as e:
+        if e.errno == errno.ELOOP:
+            raise HTTPException(status_code=400, detail="Refusing to follow a symlink")
+        if e.errno == errno.EISDIR:
+            raise HTTPException(status_code=400, detail="Path is a directory")
+        raise
+    finally:
+        os.close(dir_fd)
+
+
+def _read_bytes(repl_id: str, rel: str) -> bytes:
+    fd = _open_beneath(repl_id, rel, os.O_RDONLY)
+    with os.fdopen(fd, "rb") as f:
+        if not stat.S_ISREG(os.fstat(f.fileno()).st_mode):
+            raise HTTPException(status_code=404, detail="File not found")
+        return f.read()
+
+
+def read_file(repl_id: str, rel: str) -> dict:
+    data = _read_bytes(repl_id, rel)
     try:
         return {"path": rel, "content": data.decode("utf-8"), "encoding": "utf-8"}
     except UnicodeDecodeError:
@@ -113,10 +157,7 @@ def read_file(repl_id: str, rel: str) -> dict:
 
 
 def read_text(repl_id: str, rel: str) -> str:
-    p = safe_path(repl_id, rel)
-    if not p.is_file():
-        raise HTTPException(status_code=404, detail="File not found")
-    return p.read_bytes().decode("utf-8", errors="replace")
+    return _read_bytes(repl_id, rel).decode("utf-8", errors="replace")
 
 
 def _mkparents(p: Path) -> None:
@@ -131,12 +172,10 @@ def _mkparents(p: Path) -> None:
 
 
 def write_file(repl_id: str, rel: str, data: bytes) -> int:
-    p = safe_path(repl_id, rel)
-    if p.is_dir():
-        raise HTTPException(status_code=400, detail="Path is a directory")
-    _mkparents(p)
-    p.write_bytes(data)
-    chown_one(p)
+    fd = _open_beneath(repl_id, rel, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, create_parents=True)
+    with os.fdopen(fd, "wb") as f:
+        f.write(data)
+        os.fchown(f.fileno(), RUNNER_UID, RUNNER_GID)
     return len(data)
 
 
