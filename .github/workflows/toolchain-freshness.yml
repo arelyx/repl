@@ -1,0 +1,40 @@
+# Weekly: bump runner/Dockerfile toolchain pins to the latest stable
+# releases and open a PR. Building and smoke-testing the image (which runs
+# `replot-versions`) happens before merging. Requires "Allow GitHub Actions to
+# create and approve pull requests" in the repository settings.
+name: Toolchain freshness
+
+on:
+  schedule:
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Bump pins
+        id: bump
+        run: |
+          python3 runner/update-versions.py | tee bump.txt
+          echo "summary<<EOF" >> "$GITHUB_OUTPUT"; grep -- '->' bump.txt >> "$GITHUB_OUTPUT" || true; echo "EOF" >> "$GITHUB_OUTPUT"
+          rm bump.txt
+      - name: Open PR
+        uses: peter-evans/create-pull-request@v7
+        with:
+          branch: chore/toolchain-bump
+          title: "Runner: bump toolchains to latest stable releases"
+          commit-message: "Runner: bump toolchains to latest stable releases"
+          body: |
+            Automated bump from `runner/update-versions.py`:
+
+            ```
+            ${{ steps.bump.outputs.summary }}
+            ```
+
+            Before merging, run `make runner` (the build fails if any toolchain doesn't start) and the template tests.

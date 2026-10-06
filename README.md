@@ -17,6 +17,11 @@ with:
 - **Sharing:** add collaborators as viewer or editor, make repls public, fork
   them, and browse public repls on Explore.
 
+Every language runs its latest stable release: Python 3.14, Node 26, Go 1.27,
+Rust 1.99, Java 27, .NET 10, GCC 16, Clang 23, Ruby 4.0, PHP 8.5, and so on.
+`make versions` prints the full list and `make update-versions` bumps the pins
+(details in [DESIGN.md §5](docs/DESIGN.md#toolchains-are-current-upstream-releases)).
+
 There are 35 templates, all smoke-tested in the image:
 
 - **Languages:** Python, Node.js, TypeScript, Java, Kotlin, C, C++, C#, Go,
@@ -36,7 +41,7 @@ reasoning behind each decision.
 
 ## Quick start
 
-Requirements: Docker with Compose v2, and roughly 6 GB of disk for the runner image.
+Requirements: Docker with Compose v2, and roughly 10 GB of disk for the runner image.
 
 ```bash
 cp .env.example .env        # then fill in the secrets and REPLS_HOST_DIR (an absolute path)

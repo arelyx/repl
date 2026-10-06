@@ -2,7 +2,7 @@
   {
     "slug": "python",
     "name": "Python",
-    "description": "Python 3 with a friendly starter",
+    "description": "Python with a friendly starter",
     "language": "python",
     "category": "language",
     "icon": "🐍",
@@ -13,7 +13,7 @@
   {
     "slug": "nodejs",
     "name": "Node.js",
-    "description": "JavaScript on Node.js 22",
+    "description": "JavaScript on Node.js",
     "language": "javascript",
     "category": "language",
     "icon": "🟩",
@@ -35,7 +35,7 @@
   {
     "slug": "java",
     "name": "Java",
-    "description": "Java 21 (OpenJDK)",
+    "description": "Java on Eclipse Temurin",
     "language": "java",
     "category": "language",
     "icon": "☕",
@@ -68,18 +68,18 @@
   {
     "slug": "cpp",
     "name": "C++",
-    "description": "C++17 with g++",
+    "description": "Modern C++ (C++26) with g++",
     "language": "cpp",
     "category": "language",
     "icon": "➕",
-    "run": "g++ -std=c++17 -O2 -o main main.cpp && ./main",
+    "run": "g++ -std=c++26 -O2 -o main main.cpp && ./main",
     "gui": false,
     "port": null
   },
   {
     "slug": "csharp",
     "name": "C#",
-    "description": ".NET 8 console app",
+    "description": ".NET console app",
     "language": "csharp",
     "category": "language",
     "icon": "#️⃣",
@@ -134,11 +134,11 @@
   {
     "slug": "lua",
     "name": "Lua",
-    "description": "Lua 5.4",
+    "description": "Lua interpreter",
     "language": "lua",
     "category": "language",
     "icon": "🌙",
-    "run": "lua5.4 main.lua",
+    "run": "lua main.lua",
     "gui": false,
     "port": null
   },
@@ -189,7 +189,7 @@
   {
     "slug": "fortran",
     "name": "Fortran",
-    "description": "Fortran 90 with gfortran",
+    "description": "Modern Fortran with gfortran",
     "language": "fortran",
     "category": "language",
     "icon": "🧮",
@@ -332,7 +332,7 @@
   {
     "slug": "react-vite",
     "name": "React (Vite)",
-    "description": "React 18 with Vite dev server",
+    "description": "React with Vite dev server",
     "language": "javascript",
     "category": "framework",
     "icon": "⚛️",
@@ -343,7 +343,7 @@
   {
     "slug": "vue-vite",
     "name": "Vue (Vite)",
-    "description": "Vue 3 with Vite dev server",
+    "description": "Vue with Vite dev server",
     "language": "javascript",
     "category": "framework",
     "icon": "🟢",
