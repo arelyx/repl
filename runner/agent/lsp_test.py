@@ -44,6 +44,8 @@ async def main() -> int:
     ap.add_argument("--expect-completion")
     ap.add_argument("--timeout", type=float, default=120)
     ap.add_argument("--url", default="ws://localhost:8008/lsp/")
+    # `docker exec` sessions inherit the container's REPLOT_AGENT_TOKEN.
+    ap.add_argument("--token", default=os.environ.get("REPLOT_AGENT_TOKEN", ""))
     a = ap.parse_args()
 
     path = os.path.join(ROOT, a.file)
@@ -55,7 +57,8 @@ async def main() -> int:
     pending: dict[int, asyncio.Future] = {}
     diags: asyncio.Future = asyncio.get_running_loop().create_future()
 
-    async with aiohttp.ClientSession() as s, s.ws_connect(a.url + a.server, max_msg_size=0) as ws:
+    async with aiohttp.ClientSession() as s, s.ws_connect(a.url + a.server, max_msg_size=0,
+                                                             headers={"X-Agent-Token": a.token}) as ws:
         async def reader():
             async for m in ws:
                 if m.type != aiohttp.WSMsgType.TEXT:

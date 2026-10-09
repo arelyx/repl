@@ -184,27 +184,54 @@ reproducible.
   networks, so each repl network gets a /28 carved from `REPL_SUBNET_POOL`
   (default `10.213.0.0/16`, room for 4096 running repls).
 - Mount `${REPLS_HOST_DIR}/{id}` → `/home/runner/app`.
-- Limits: `mem_limit=2g`, `nano_cpus=2e9`, `pids_limit=1024`, `cap_drop=ALL`
-  (only `CHOWN`, `SETUID`, `SETGID`, `DAC_OVERRIDE` are added back),
-  `security_opt=no-new-privileges`.
+- Limits (all settings, defaults shown): `REPL_CPUS=1.0`, `REPL_MEMORY=2g`
+  with memory+swap equal (no swap), `REPL_PIDS=512`, `/tmp` a tmpfs of
+  `REPL_TMPFS_SIZE=512m` (`exec`, so users can compile into it; it counts
+  against the memory limit), json-file logs rotated at
+  `REPL_LOG_MAX_SIZE=5m` x `REPL_LOG_MAX_FILE=2`, `cap_drop=ALL` with nothing
+  added back, `no-new-privileges`, `oom_score_adj=800`. Containers live under
+  the systemd slice `REPL_CGROUP_PARENT=replot-repls.slice`, so the whole
+  fleet can be capped in one place (`systemctl set-property
+  replot-repls.slice CPUQuota=... MemoryMax=...`); if Docker rejects the
+  slice (cgroupfs driver) repls start under Docker's default parent. Labels:
+  `replot.repl={id}`, `replot.user={id of the user who started it}`.
+- Caps: a user may have `MAX_RUNNING_PER_USER=2` repls running; starting
+  another stops their least recently active one(s), and the start response
+  lists them (`{"status":"running","stopped":["..."]}`). Past
+  `MAX_RUNNING_REPLS=40` running repls, start returns 503.
+- Disk: `REPL_DISK_QUOTA_MB=2048` covers the repl directory plus the
+  container's writable layer (`SizeRw`: `~/.cache`, `~/.local`, ...). Start
+  refuses (507) a repl whose directory is over quota; the reaper stops
+  running ones that go over.
 - Entrypoint (`/opt/replagent/entrypoint.sh`) starts Xvfb `:0` (960x600),
-  fluxbox, x11vnc (`-forever -shared -nopw`, localhost only), websockify `:6080`
-  serving `/usr/share/novnc`, then the agent on `:8008`.
+  fluxbox, x11vnc (`-forever -shared -nopw`, localhost only), websockify on
+  `127.0.0.1:6080` serving `/usr/share/novnc`, then the agent on `:8008`.
+  Only the agent receives `REPLOT_AGENT_TOKEN`, and it removes it from its
+  own environment before starting anything.
 - Lifecycle: `POST /repls/{id}/start` creates the network and container, then
   waits until the agent's `/health` answers. Startup takes about 0.6 s, so
   containers are disposable: stopping a repl removes the container and its
-  network, and only the files on disk persist. Opening a repl calls start. A reaper
-  stops containers idle for more than `IDLE_TIMEOUT_MINUTES` (default 30) with no
-  agent WebSocket clients.
+  network, and only the files on disk persist. Opening a repl calls start. A
+  reaper runs every minute and stops containers with no *editor* connected
+  for `IDLE_TIMEOUT_MINUTES` (default 30; anonymous viewers of a public
+  repl's console don't count), containers older than `MAX_CONTAINER_HOURS`
+  (default 12), and containers over the disk quota.
 
 ### Agent protocol (port 8008)
 
 | Endpoint | Purpose |
 |---|---|
-| `GET /health` | `{"ok":true}` |
+| `GET /health` | `{"ok":true,"clients":N,"editors":E,"viewers":V}` |
 | `GET /ports` | `{"ports":[3000,8000]}`: TCP ports listening on any interface, excluding 8008/6080/5900. |
 | `WS /run` | Attach to the single shared Run process. |
 | `WS /shell` | A fresh `bash -l` PTY per connection. |
+| `WS /lsp/{server}` | A language server (see `lsp_bridge.py`). |
+| `GET`/`WS /vnc/{path}` | noVNC's files and websockify, proxied to `127.0.0.1:6080`. |
+
+Every request must carry `X-Agent-Token`, or the agent answers 401. The
+token is `HMAC-SHA256(INTERNAL_SECRET, "agent:" + repl_id)` (hex). The
+backend sends it on its own `/health` and `/ports` calls and returns it from
+`/internal/auth-repl`; nginx forwards it on the `/ws/repls/...` routes.
 
 WebSocket messages are JSON text frames:
 
@@ -255,7 +282,7 @@ Create and fork return 403 past `MAX_REPLS_PER_USER`; fork returns 413 when the 
 `Repl = {id, name, description, template, language, is_public, owner: {id, username, display_name}, role: "owner"|"editor"|"viewer", forked_from, created_at, updated_at, config: {run, entrypoint, gui, port}}`
 
 **Runtime**
-- `POST /repls/{id}/start` → `{status: "running"}` (editor+)
+- `POST /repls/{id}/start` → `{status: "running", stopped: string[]}` (editor+). `stopped` lists the caller's repls stopped to stay under `MAX_RUNNING_PER_USER`; 503 when the server is at `MAX_RUNNING_REPLS`, 507 when the repl is over its disk quota.
 - `POST /repls/{id}/stop` → `{status: "stopped"}` (editor+)
 - `GET /repls/{id}/status` → `{status: "running"|"stopped"|"missing"}`
 - `GET /repls/{id}/ports` → `{ports: number[], preview_base: "http://{id}-{port}.preview.localhost:8380"}`
@@ -290,8 +317,8 @@ authored as `<username>@users.noreply.replot`.
 - `DELETE /repls/{id}/collaborators/{user_id}` (owner)
 
 **Internal** (not routed by nginx except `auth-repl` as an internal subrequest)
-- `GET /internal/auth-repl` with headers `X-Repl-Id` and `X-Repl-Service: run|shell|vnc` and the
-  user's cookie → 204 if allowed (`run` needs viewer, `shell`/`vnc` need editor), 401/403 otherwise.
+- `GET /internal/auth-repl` with headers `X-Repl-Id` and `X-Repl-Service: run|shell|vnc|lsp` and the
+  user's cookie → 204 if allowed (`run` needs viewer, `shell`/`vnc`/`lsp` need editor), 401/403 otherwise. The 204 carries `X-Repl-Role` and the repl's `X-Agent-Token` for nginx to forward.
 - `GET /internal/collab-auth?repl_id=&path=` + the user's cookie → `{user_id, username, read_only}` | 401/403
 - `GET /internal/files/content?repl_id=&path=` (header `X-Internal-Secret`) → `{content}`
 - `PUT /internal/files/content {repl_id, path, content}` (header `X-Internal-Secret`)
@@ -396,15 +423,27 @@ runaway is intermittent and its trigger is unknown. The defenses are layered:
 
 ## 9. Security notes
 
-- User code runs in containers as uid 1000 with dropped capabilities,
-  `no-new-privileges`, and memory, CPU, and pid limits. This is not a hard
+- User code runs in containers as uid 1000 with no capabilities,
+  `no-new-privileges`, and memory, CPU, pid, `/tmp` and log limits (§5). The
+  image has no `sudo`. This is not a hard
   sandbox: anyone who can break out of runc reaches a host with the Docker
   socket mounted in the backend. Production should use gVisor (`--runtime=runsc`),
   which is a single config switch (`REPL_RUNTIME`).
 - Each repl has its own bridge network (§5). Repls can reach the internet (for
   `pip install` and `npm install`) but not each other, and not postgres, which
   sits on `rc-internal`.
-- The preview proxy refuses ports 8008, 6080, and 5900, the agent and VNC.
+- The agent requires a per-repl token on every request (§5), so reaching
+  `:8008` on a repl's network is not enough to get a shell. noVNC and VNC
+  listen on the container's loopback only and are reached through the agent.
+- The preview proxy accepts only canonical ports 1-65535 (no leading zeros:
+  `-08008` used to reach the agent) and refuses 8008, 6080 and 5900. It
+  strips `Cookie`, `X-Agent-Token` and `X-Repl-Role` from what it forwards;
+  the `/ws/repls` routes strip `Cookie` too.
+- nginx rate-limits per client address: login/register 10/min (burst 10),
+  the rest of `/api` 20/s (burst 40), and at most 50 concurrent `/ws`
+  connections. The app sends `X-Content-Type-Options: nosniff`,
+  `Referrer-Policy: strict-origin-when-cross-origin` and
+  `Content-Security-Policy: frame-ancestors 'self'`.
 - Previews are a different *origin* from the app but the same *site*, so
   SameSite=Lax cookies are still sent from preview pages. nginx therefore
   refuses any request to the app whose `Origin` is a preview host.
@@ -414,15 +453,18 @@ runaway is intermittent and its trigger is unknown. The defenses are layered:
 - nginx passes the caller's role (`X-Repl-Role`, from the auth subrequest) to
   the agent. Viewers can watch the console of a public repl, but the agent
   drops their start, stop, and stdin.
-- **git never runs as root.** Repl users have a shell next to `.git`, so
-  `.git/config` and `.gitattributes` are attacker-controlled: `core.fsmonitor`,
-  hooks, and filter drivers can all run commands. The backend holds the Docker
-  socket, so it runs git as uid 1000 with no supplementary groups (and so no
-  docker group). It also uses a throwaway `HOME`, no system or global config,
-  and forces `core.fsmonitor`, `core.hooksPath`, `diff.external` and the
-  credential helper off. Verified: a malicious `filter.x.clean` runs as
-  `uid=1000`, and that uid can neither open `docker.sock` nor read the
-  backend's environment.
+- **git never runs in the backend.** Repl users have a shell next to `.git`,
+  so `.git/config` and `.gitattributes` are attacker-controlled:
+  `core.fsmonitor`, hooks, and filter drivers can all run commands. The
+  backend holds the Docker socket and sits on every repl's network, so git
+  runs in the repl's own sandbox: `docker exec` as uid 1000 in the repl's
+  container when it is running, otherwise a throwaway container from the
+  runner image (`--network none`, uid 1000, read-only root, 512 MB / 128 pids
+  / 1 CPU, only the repl directory mounted) that lives for one API call. git
+  still gets a throwaway `HOME`, no system or global config, and
+  `core.fsmonitor`, `core.hooksPath`, `diff.external` and the credential
+  helper forced off. Verified: a malicious `filter.x.clean` runs inside the
+  repl's container or the throwaway one, with no network.
 - File API paths are resolved and checked against the repl root (no `..`, no
   symlink escape). Reads and writes then walk the path one component at a
   time with `openat` + `O_NOFOLLOW`. Without that, a user could swap a

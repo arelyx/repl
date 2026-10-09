@@ -35,9 +35,12 @@ async def auth_repl(
     role = await get_role(db, repl, user)
     if role is None or ROLE_RANK[role] < ROLE_RANK[min_role]:
         return Response(status_code=401 if user is None else 403)
-    runtime.touch(repl.id)
-    # nginx forwards this to the agent, which ignores Run controls from viewers.
-    return Response(status_code=204, headers={"X-Repl-Role": role})
+    if ROLE_RANK[role] >= ROLE_RANK["editor"]:
+        runtime.touch_editor(repl.id)
+    # nginx forwards both to the agent: the role (viewers can't control Run)
+    # and the repl's agent token, which the agent requires on every request.
+    return Response(status_code=204, headers={
+        "X-Repl-Role": role, "X-Agent-Token": runtime.agent_token(repl.id)})
 
 
 @router.get("/collab-auth")
@@ -55,7 +58,8 @@ async def collab_auth(
         raise HTTPException(status_code=403, detail="Forbidden")
     if path:
         fsops.safe_path(repl_id, path)
-    runtime.touch(repl_id)
+    if ROLE_RANK[role] >= ROLE_RANK["editor"]:
+        runtime.touch_editor(repl_id)
     return {
         "user_id": user.id,
         "username": user.username,

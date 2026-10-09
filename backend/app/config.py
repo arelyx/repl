@@ -21,7 +21,8 @@ class Settings(BaseSettings):
     REPL_NETWORK: str = "rc-repls"
     PUBLIC_HOST: str = "localhost:8380"
     IDLE_TIMEOUT_MINUTES: int = 30
-    REPL_RUNTIME: str = ""
+    # gVisor: user code never talks to the host kernel directly. Empty = runc.
+    REPL_RUNTIME: str = "runsc"
     COLLAB_COMMAND_URL: str = "http://collaboration:1235"
     # Containers attached to every per-repl network (they proxy to / poll repls).
     GATEWAY_CONTAINERS: str = "replot-nginx,replot-backend"
@@ -111,6 +112,36 @@ class Settings(BaseSettings):
         if self.PUBLIC_SCHEME.strip().lower() not in ("http", "https"):
             problems.append("PUBLIC_SCHEME must be http or https")
         return problems
+    # --- runtime hardening (S1) ---
+    # Per-container resource caps.
+    REPL_CPUS: float = 1.0
+    REPL_MEMORY: str = "2g"  # memory and memory+swap are both set to this (no swap)
+    # Host pids (threads included). Under runc that is the repl's own
+    # processes and threads. Under gVisor (runsc, systrap) every guest process
+    # costs ~2 host pids and ~3.5 MB, threads almost nothing, and hitting the
+    # limit kills the whole sandbox: 512 allows ~230 guest processes, so use
+    # ~2048 with runsc and let REPL_MEMORY bound process count instead.
+    REPL_PIDS: int = 2048
+    REPL_TMPFS_SIZE: str = "512m"
+    REPL_LOG_MAX_SIZE: str = "5m"
+    REPL_LOG_MAX_FILE: int = 2
+    # systemd slice every repl container lives under, so the whole fleet can be
+    # capped in one place (`systemctl set-property replot-repls.slice
+    # CPUQuota=1600% MemoryMax=48G`). Empty = Docker's default parent.
+    REPL_CGROUP_PARENT: str = "replot-repls.slice"
+    # Running-container caps. Starting past the per-user cap stops that user's
+    # least recently active repl(s); past the global cap, start is refused.
+    MAX_RUNNING_PER_USER: int = 2
+    MAX_RUNNING_REPLS: int = 40
+    # REPL_DISK_QUOTA_MB (app hardening block above) is the repl directory +
+    # container writable layer limit, checked at start and by the reaper.
+    # Hard lifetime of a container regardless of activity.
+    MAX_CONTAINER_HOURS: float = 12
+    # Throwaway containers that run git for repls that are not running.
+    GIT_CONTAINER_MEMORY: str = "512m"
+    GIT_CONTAINER_PIDS: int = 128
+    GIT_CONTAINER_CPUS: float = 1.0
+    # --- end runtime hardening (S1) ---
 
     @property
     def repls_host_dir(self) -> str:
