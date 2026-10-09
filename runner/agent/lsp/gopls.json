@@ -1,0 +1,14 @@
+{
+  "gopls": {
+    "command": ["gopls", "serve"],
+    "settings": {
+      "gopls": {
+        "staticcheck": false,
+        "completeUnimported": true,
+        "usePlaceholders": false,
+        "semanticTokens": false,
+        "hints": {}
+      }
+    }
+  }
+}

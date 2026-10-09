@@ -1,0 +1,21 @@
+{
+  "typescript": {
+    "command": ["/opt/lsp/typescript/bin/typescript-language-server", "--stdio"],
+    "initializationOptions": {
+      "tsserver": {"path": "/opt/lsp/typescript/node_modules/typescript/lib", "useSyntaxServer": "never"},
+      "maxTsServerMemory": 768,
+      "preferences": {
+        "includeCompletionsForModuleExports": true,
+        "includeCompletionsWithInsertText": true,
+        "includeCompletionsForImportStatements": true,
+        "includeAutomaticOptionalChainCompletions": true,
+        "allowIncompleteCompletions": true
+      }
+    },
+    "settings": {
+      "implicitProjectConfiguration": {"checkJs": false, "strict": false, "strictNullChecks": true, "strictFunctionTypes": true},
+      "typescript": {"suggest": {"completeFunctionCalls": false}},
+      "javascript": {"suggest": {"completeFunctionCalls": false}}
+    }
+  }
+}

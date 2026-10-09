@@ -1,0 +1,11 @@
+{
+  "vue": {
+    "command": ["python3", "/opt/lsp/vue/vue-hybrid.py"],
+    "settings": {
+      "implicitProjectConfiguration": {"checkJs": false, "strict": false, "strictNullChecks": true, "strictFunctionTypes": true},
+      "typescript": {"suggest": {"completeFunctionCalls": false}},
+      "javascript": {"suggest": {"completeFunctionCalls": false}},
+      "vue": {"suggest": {"componentNameCasing": "preferPascalCase", "propNameCasing": "preferCamelCase"}}
+    }
+  }
+}
