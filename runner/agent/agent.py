@@ -2,17 +2,23 @@
 """Replot in-container agent.
 
 Listens on 0.0.0.0:8008 and exposes:
-  GET /health  -> {"ok": true, "clients": N}
+  GET /health  -> {"ok": true, "clients": N, "editors": E, "viewers": V}
   GET /ports   -> {"ports": [...]}  TCP ports in LISTEN state (minus our own)
   WS  /run     -> the single shared Run process (scrollback replay + status)
   WS  /shell   -> a fresh `bash -l` PTY per connection
   WS  /lsp/{server} -> a language server over JSON-RPC (see lsp_bridge.py)
+  GET/WS /vnc/{path} -> noVNC + websockify (listening on 127.0.0.1:6080 only)
+
+Every request must carry `X-Agent-Token: $REPLOT_AGENT_TOKEN`. The backend
+derives the token per repl and hands it to this container and to nginx (via
+the auth subrequest), so nothing else that can reach :8008 gets in.
 
 Only aiohttp + stdlib.
 """
 import asyncio
 import codecs
 import fcntl
+import hmac
 import json
 import os
 import re
@@ -22,6 +28,7 @@ import struct
 import termios
 import tomllib
 
+import aiohttp
 from aiohttp import WSMsgType, web
 
 import lsp_bridge
@@ -62,7 +69,31 @@ FALLBACKS = [
     ("package.json", "npm install && npm start"),
 ]
 
+# Taken out of the environment before any child starts, so user programs (and
+# viewers watching their output) never see it.
+AGENT_TOKEN = os.environ.pop("REPLOT_AGENT_TOKEN", "")
+VNC_UPSTREAM = "127.0.0.1:6080"
+
 total_clients = 0
+# Connections by role. The backend's idle reaper only counts editors, so an
+# anonymous viewer of a public repl can't keep its container alive forever.
+role_clients = {"editor": 0, "viewer": 0}
+
+
+def _client_kind(request):
+    return "editor" if request.headers.get("X-Repl-Role", "") in ("owner", "editor") else "viewer"
+
+
+def _connected(kind):
+    global total_clients
+    total_clients += 1
+    role_clients[kind] += 1
+
+
+def _disconnected(kind):
+    global total_clients
+    total_clients -= 1
+    role_clients[kind] -= 1
 
 
 # ---------------------------------------------------------------- helpers
@@ -438,8 +469,18 @@ def parse(msg):
         return None
 
 
+@web.middleware
+async def require_token(request, handler):
+    # Fail closed: no token configured means nobody gets in.
+    given = request.headers.get("X-Agent-Token", "")
+    if not AGENT_TOKEN or not hmac.compare_digest(given.encode(), AGENT_TOKEN.encode()):
+        return web.Response(status=401, text="unauthorized\n")
+    return await handler(request)
+
+
 async def health(request):
-    return web.json_response({"ok": True, "clients": total_clients})
+    return web.json_response({"ok": True, "clients": total_clients,
+                              "editors": role_clients["editor"], "viewers": role_clients["viewer"]})
 
 
 def _is_loopback(addr_hex):
@@ -477,11 +518,11 @@ async def ports(request):
 
 
 async def run_ws(request):
-    global total_clients
     ws = web.WebSocketResponse(heartbeat=30, max_msg_size=4 * 1024 * 1024)
     await ws.prepare(request)
     client = Client(ws)
-    total_clients += 1
+    kind = _client_kind(request)
+    _connected(kind)
     # nginx sets this from the backend's auth decision. Viewers of a public
     # repl may watch the console but not start, stop, or type into the run.
     can_control = request.headers.get("X-Repl-Role", "") in ("owner", "editor")
@@ -514,16 +555,16 @@ async def run_ws(request):
     finally:
         RUN.clients.discard(client)
         client.close()
-        total_clients -= 1
+        _disconnected(kind)
     return ws
 
 
 async def shell_ws(request):
-    global total_clients
     ws = web.WebSocketResponse(heartbeat=30, max_msg_size=4 * 1024 * 1024)
     await ws.prepare(request)
     client = Client(ws)
-    total_clients += 1
+    # nginx only lets editors reach /shell, /lsp and /vnc.
+    _connected("editor")
     try:
         rows = int(request.query.get("rows", 24))
         cols = int(request.query.get("cols", 80))
@@ -561,7 +602,7 @@ async def shell_ws(request):
         except Exception:
             pass
     finally:
-        total_clients -= 1
+        _disconnected("editor")
         if proc.alive:
             proc.signal_group(signal.SIGHUP)
             proc.signal_group(signal.SIGCONT)
@@ -575,24 +616,78 @@ async def shell_ws(request):
     return ws
 
 
+_HOP_HEADERS = {"connection", "keep-alive", "transfer-encoding", "upgrade", "content-length",
+                "content-encoding", "proxy-connection", "te", "trailer"}
+
+
+async def vnc_proxy(request):
+    """noVNC's static files and websockify listen on 127.0.0.1 only and can't
+    check a token themselves, so they are reached through here."""
+    rest = request.match_info["rest"]
+    if request.headers.get("Upgrade", "").lower() == "websocket":
+        return await _vnc_ws(request, rest)
+    if request.method not in ("GET", "HEAD"):
+        raise web.HTTPMethodNotAllowed(request.method, ["GET", "HEAD"])
+    url = f"http://{VNC_UPSTREAM}/{rest}"
+    try:
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=30)) as s:
+            async with s.request(request.method, url, params=request.query,
+                                 allow_redirects=False) as r:
+                body = await r.read()
+                headers = {k: v for k, v in r.headers.items() if k.lower() not in _HOP_HEADERS}
+                return web.Response(status=r.status, body=body, headers=headers)
+    except (aiohttp.ClientError, OSError) as e:
+        raise web.HTTPBadGateway(text=f"display not available: {e}")
+
+
+async def _vnc_ws(request, rest):
+    protocols = [p.strip() for p in request.headers.get("Sec-WebSocket-Protocol", "").split(",") if p.strip()]
+    session = aiohttp.ClientSession()
+    try:
+        try:
+            up = await session.ws_connect(f"ws://{VNC_UPSTREAM}/{rest}", protocols=protocols,
+                                          max_msg_size=0)
+        except (aiohttp.ClientError, OSError) as e:
+            raise web.HTTPBadGateway(text=f"display not available: {e}")
+        down = web.WebSocketResponse(protocols=[up.protocol] if up.protocol else (),
+                                     max_msg_size=0, heartbeat=30)
+        await down.prepare(request)
+        _connected("editor")
+
+        async def pump(src, dst):
+            async for m in src:
+                if m.type == WSMsgType.BINARY:
+                    await dst.send_bytes(m.data)
+                elif m.type == WSMsgType.TEXT:
+                    await dst.send_str(m.data)
+                else:
+                    break
+
+        tasks = [asyncio.create_task(pump(up, down)), asyncio.create_task(pump(down, up))]
+        try:
+            await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+        finally:
+            for t in tasks:
+                t.cancel()
+            _disconnected("editor")
+            await up.close()
+            await down.close()
+        return down
+    finally:
+        await session.close()
+
+
 def main():
     signal.signal(signal.SIGPIPE, signal.SIG_IGN)
-    app = web.Application()
+    app = web.Application(middlewares=[require_token])
     app.router.add_get("/health", health)
     app.router.add_get("/ports", ports)
     app.router.add_get("/run", run_ws)
     app.router.add_get("/shell", shell_ws)
-
-    def lsp_open():
-        global total_clients
-        total_clients += 1
-
-    def lsp_close():
-        global total_clients
-        total_clients -= 1
-
+    app.router.add_route("*", "/vnc/{rest:.*}", vnc_proxy)
     app.router.add_get("/lsp/{server}", lsp_bridge.make_handler(
-        lambda: child_env(read_replit().get("port")), lsp_open, lsp_close))
+        lambda: child_env(read_replit().get("port")),
+        lambda: _connected("editor"), lambda: _disconnected("editor")))
     web.run_app(app, host="0.0.0.0", port=8008, access_log=None, print=None,
                 handle_signals=True)
 

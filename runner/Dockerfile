@@ -89,7 +89,7 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # shared libraries). Free Pascal and Guile ship as their current upstream
 # releases in the distro.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      ca-certificates curl wget gnupg git sudo less nano vim-tiny unzip zip xz-utils bzip2 \
+      ca-certificates curl wget gnupg git less nano vim-tiny unzip zip xz-utils bzip2 \
       procps iproute2 net-tools lsof htop tree jq sqlite3 locales tini file \
       build-essential gdb make cmake ninja-build pkg-config \
       libssl-dev libyaml-dev zlib1g-dev libffi-dev libreadline-dev libgmp-dev libncurses-dev \
@@ -215,5 +215,5 @@ RUN chmod +x /opt/replagent/entrypoint.sh
 
 USER runner
 WORKDIR /home/runner/app
-EXPOSE 8008 6080
+EXPOSE 8008
 ENTRYPOINT ["/usr/bin/tini", "--", "/opt/replagent/entrypoint.sh"]

@@ -182,9 +182,10 @@ async def fork_repl(
 
 @router.post("/repls/{repl_id}/start")
 async def start_repl(ctx=Depends(require_role("editor"))):
-    repl, _, _ = ctx
-    await runtime.start(repl.id)
-    return {"status": "running"}
+    repl, _, user = ctx
+    # Past MAX_RUNNING_PER_USER this stops the user's least recently active repls.
+    stopped = await runtime.start(repl.id, user.id if user else None)
+    return {"status": "running", "stopped": stopped}
 
 
 @router.post("/repls/{repl_id}/stop")
