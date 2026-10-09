@@ -38,9 +38,9 @@ export function EditorArea() {
   }, [manager, openTabs]);
 
   return (
-    <div className="flex h-full flex-col bg-[#1e1e1e]">
-      <ScrollArea className="shrink-0 border-b bg-card">
-        <div className="flex h-9">
+    <div className="flex h-full flex-col bg-editor">
+      <ScrollArea className="shrink-0 bg-card">
+        <div className="flex h-11 items-center gap-1 px-2">
           {openTabs.map((p) => {
             const name = p.split("/").pop();
             return (
@@ -50,15 +50,15 @@ export function EditorArea() {
                 onClick={() => openFile(p)}
                 onAuxClick={(e) => e.button === 1 && closeFile(p)}
                 className={cn(
-                  "group flex cursor-pointer items-center gap-2 border-r px-3 text-sm whitespace-nowrap",
+                  "group flex h-8 cursor-pointer items-center gap-1.5 rounded-md pr-1 pl-2.5 text-[13px] whitespace-nowrap",
                   p === activePath
-                    ? "border-t-2 border-t-primary bg-[#1e1e1e] text-foreground"
+                    ? "bg-mist font-medium text-foreground"
                     : "text-muted-foreground hover:text-foreground",
                 )}
               >
                 {name}
                 <button
-                  className="rounded p-0.5 opacity-60 hover:bg-accent hover:opacity-100"
+                  className="rounded-sm p-1 opacity-60 hover:bg-background hover:opacity-100 focus-visible:opacity-100"
                   onClick={(e) => {
                     e.stopPropagation();
                     closeFile(p);
@@ -77,9 +77,9 @@ export function EditorArea() {
         {activePath ? (
           <CodeEditor key={`${activePath}#${fsEpoch}`} replId={repl.id} path={activePath} readOnly={!editable} />
         ) : (
-          <div className="flex h-full flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
-            <Code2 className="size-10 opacity-30" />
-            Open a file from the sidebar to start editing.
+          <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center text-sm text-muted-foreground">
+            <Code2 className="size-8 opacity-40" aria-hidden />
+            <p className="max-w-[28ch]">Open a file from Files to start editing.</p>
           </div>
         )}
       </div>

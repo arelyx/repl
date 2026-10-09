@@ -1,12 +1,20 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#1c2333" />
+    <meta name="theme-color" content="#E8EDEF" />
+    <script>
+      // Apply the saved daylight/dusk theme before first paint.
+      try {
+        var t = localStorage.getItem("replot.theme");
+        if (t === "dusk" || (!t && matchMedia("(prefers-color-scheme: dark)").matches))
+          document.documentElement.classList.add("dark");
+      } catch (e) {}
+    </script>
     <title>Replot</title>
-    <meta name="description" content="Replot: code, run, and collaborate in the browser in dozens of languages." />
+    <meta name="description" content="Write and run code in your browser, with a real Linux container behind every repl." />
   </head>
   <body>
     <div id="root"></div>

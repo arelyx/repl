@@ -13,8 +13,8 @@ export function DisplayPane() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex h-8 shrink-0 items-center gap-2 border-b px-2 text-xs text-muted-foreground">
-        <Monitor className="size-3.5" /> Display (960×600)
+      <div className="flex h-9 shrink-0 items-center gap-2 px-4 text-[13px] text-muted-foreground">
+        <Monitor className="size-3.5" aria-hidden /> Desktop, 960 by 600
         <Button variant="ghost" size="xs" className="ml-auto" onClick={() => setNonce((n) => n + 1)}>
           <RotateCw /> Reload
         </Button>
@@ -25,7 +25,7 @@ export function DisplayPane() {
         </div>
       ) : container !== "running" ? (
         <div className="flex flex-1 items-center justify-center p-6 text-center text-sm text-muted-foreground">
-          Waiting for container…
+          The display appears once the container is running.
         </div>
       ) : (
         <iframe key={nonce} src={src} title="Display" className="min-h-0 flex-1 border-0 bg-black" />

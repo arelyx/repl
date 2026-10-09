@@ -32,10 +32,10 @@ export function LoginPage() {
   };
 
   return (
-    <Card>
+    <Card className="gap-5 px-1 sm:px-3">
       <CardHeader>
-        <CardTitle>Log in</CardTitle>
-        <CardDescription>Welcome back. Your repls are waiting.</CardDescription>
+        <CardTitle className="text-2xl font-semibold tracking-[-0.01em]">Log in</CardTitle>
+        <CardDescription>Use your email or username.</CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={submit} className="space-y-4">
@@ -64,9 +64,9 @@ export function LoginPage() {
           <Button type="submit" className="w-full" disabled={busy}>
             {busy && <Loader2 className="animate-spin" />} Log in
           </Button>
-          <p className="text-center text-sm text-muted-foreground">
+          <p className="text-sm text-muted-foreground">
             New to Replot?{" "}
-            <Link to="/register" className="text-primary hover:underline">
+            <Link to="/register" className="font-medium text-primary underline-offset-4 hover:underline">
               Create an account
             </Link>
           </p>

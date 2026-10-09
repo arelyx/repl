@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { GitBranch, GitCommitHorizontal, History, Loader2, RefreshCw, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -46,13 +45,13 @@ function statusLetter(status: string): string {
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  M: "text-yellow-400",
-  A: "text-green-400",
-  D: "text-red-400",
-  R: "text-sky-400",
-  "?": "text-green-400",
-  "??": "text-green-400",
-  U: "text-green-400",
+  M: "text-warn",
+  A: "text-live",
+  D: "text-destructive",
+  R: "text-primary",
+  "?": "text-live",
+  "??": "text-live",
+  U: "text-live",
 };
 
 export function GitPanel({ active }: { active: boolean }) {
@@ -135,39 +134,40 @@ export function GitPanel({ active }: { active: boolean }) {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex h-9 shrink-0 items-center gap-1 border-b px-2">
-        <span className="mr-auto text-xs font-semibold tracking-wider text-muted-foreground uppercase">
-          Version control
-        </span>
-        {status && (
-          <Badge variant="outline" className="gap-1 font-mono text-[10px]">
-            <GitBranch className="size-3" />
-            {status.branch}
-          </Badge>
+      <div className="flex h-9 shrink-0 items-center gap-1 px-4">
+        {status ? (
+          <span className="mr-auto flex min-w-0 items-center gap-1.5 text-[13px] text-muted-foreground">
+            <GitBranch className="size-3.5 shrink-0" aria-hidden />
+            <span className="truncate">On {status.branch}</span>
+          </span>
+        ) : (
+          <span className="mr-auto" />
         )}
-        <Button variant="ghost" size="icon-xs" title="Refresh" onClick={() => void refresh()}>
+        <Button variant="ghost" size="icon-xs" title="Refresh" aria-label="Refresh version control" onClick={() => void refresh()}>
           <RefreshCw />
         </Button>
       </div>
       <ScrollArea className="min-h-0 flex-1">
-        <div className="space-y-4 p-3">
+        <div className="space-y-6 px-3 pt-1 pb-4">
           <section className="space-y-2">
-            <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
-              <span>Changes ({changes.length})</span>
+            <div className="flex items-center justify-between px-1 text-[13px] font-medium">
+              <span>
+                Changes <span className="font-normal text-muted-foreground">{changes.length}</span>
+              </span>
               {changes.length > 0 && (
-                <button className="text-primary hover:underline" onClick={() => void openCommit(null)}>
-                  view diff
+                <button className="rounded-sm font-normal text-primary underline-offset-4 hover:underline" onClick={() => void openCommit(null)}>
+                  View diff
                 </button>
               )}
             </div>
             {changes.length === 0 ? (
-              <p className="text-xs text-muted-foreground">Working tree clean.</p>
+              <p className="px-1 text-[13px] text-muted-foreground">No changes since the last commit.</p>
             ) : (
               <ul className="space-y-0.5">
                 {changes.map((c) => (
                   <li
                     key={c.path}
-                    className="flex cursor-pointer items-center gap-2 rounded px-1 text-xs hover:bg-accent"
+                    className="flex h-7 cursor-pointer items-center gap-2 rounded-md px-1.5 text-[13px] hover:bg-mist/60"
                     onClick={() => useWorkspace.getState().openFile(c.path)}
                   >
                     <span className={`w-5 shrink-0 font-mono font-semibold ${STATUS_COLORS[statusLetter(c.status)] ?? "text-muted-foreground"}`}>
@@ -182,7 +182,7 @@ export function GitPanel({ active }: { active: boolean }) {
               <div className="space-y-2 pt-1">
                 <Textarea
                   placeholder="Commit message"
-                  className="min-h-14 text-xs"
+                  className="min-h-16 text-[13px]"
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
                   onKeyDown={(e) => {
@@ -197,26 +197,26 @@ export function GitPanel({ active }: { active: boolean }) {
           </section>
 
           <section className="space-y-2">
-            <div className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
-              <History className="size-3.5" /> History
+            <div className="flex items-center gap-1.5 px-1 text-[13px] font-medium">
+              <History className="size-3.5 text-muted-foreground" aria-hidden /> History
             </div>
             {!log ? (
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Loader2 className="size-3 animate-spin" /> Loading…
               </div>
             ) : log.length === 0 ? (
-              <p className="text-xs text-muted-foreground">No commits yet.</p>
+              <p className="px-1 text-[13px] text-muted-foreground">No commits yet. Write a message above and commit to save a snapshot.</p>
             ) : (
               <ul className="space-y-1">
                 {log.map((c) => (
                   <li
                     key={c.sha}
-                    className="cursor-pointer rounded border border-transparent p-1.5 hover:border-border hover:bg-accent/50"
+                    className="cursor-pointer rounded-lg px-2 py-1.5 hover:bg-mist/60"
                     onClick={() => void openCommit(c)}
                   >
-                    <div className="truncate text-xs font-medium">{c.message}</div>
-                    <div className="flex gap-2 text-[11px] text-muted-foreground">
-                      <span className="font-mono text-primary/80">{c.short_sha}</span>
+                    <div className="truncate text-[13px] font-medium">{c.message}</div>
+                    <div className="flex gap-2 text-xs text-muted-foreground">
+                      <span className="font-mono text-primary">{c.short_sha}</span>
                       <span className="truncate">{c.author_name}</span>
                       <span className="ml-auto shrink-0">{timeAgo(c.date)}</span>
                     </div>

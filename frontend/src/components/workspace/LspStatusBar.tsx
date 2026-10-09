@@ -14,10 +14,10 @@ const prettyLanguage = (path: string) => {
 };
 
 function SeverityIcon({ severity, className }: { severity: Diagnostic["severity"]; className?: string }) {
-  if (severity === 2) return <AlertTriangle className={cn("size-3.5 text-yellow-500", className)} />;
-  if (severity === 3) return <Info className={cn("size-3.5 text-sky-400", className)} />;
+  if (severity === 2) return <AlertTriangle className={cn("size-3.5 text-warn", className)} />;
+  if (severity === 3) return <Info className={cn("size-3.5 text-primary", className)} />;
   if (severity === 4) return <Lightbulb className={cn("size-3.5 text-muted-foreground", className)} />;
-  return <CircleX className={cn("size-3.5 text-red-500", className)} />;
+  return <CircleX className={cn("size-3.5 text-destructive", className)} />;
 }
 
 /** The strip under the editor: language-server state and the Problems list. */
@@ -55,7 +55,7 @@ export function LspStatusBar({ path, readOnly }: { path: string | null; readOnly
   if (readOnly || !manager) {
     state = (
       <span className="flex items-center gap-1.5">
-        <ZapOff className="size-3" /> Read-only · no intellisense
+        <ZapOff className="size-3" /> Read-only, no intellisense
       </span>
     );
   } else if (!route) {
@@ -108,13 +108,13 @@ export function LspStatusBar({ path, readOnly }: { path: string | null; readOnly
   } else if (status.state === "ready") {
     state = (
       <span className="flex items-center gap-1.5">
-        <Sparkles className="size-3 text-green-500" /> {label}
+        <Sparkles className="size-3 text-live" /> {label}
       </span>
     );
   }
 
   return (
-    <div className="flex h-6 shrink-0 items-center justify-between gap-3 border-t bg-card px-3 text-[11px] text-muted-foreground">
+    <div className="flex h-8 shrink-0 items-center justify-between gap-3 bg-card px-4 text-xs text-muted-foreground">
       <div className="min-w-0" data-testid="lsp-status" data-state={status?.state ?? (route ? "none" : "unsupported")}>
         {state}
       </div>
@@ -127,10 +127,10 @@ export function LspStatusBar({ path, readOnly }: { path: string | null; readOnly
               data-testid="lsp-problems"
             >
               <span className="flex items-center gap-1">
-                <CircleX className={cn("size-3", errors ? "text-red-500" : "")} /> {errors}
+                <CircleX className={cn("size-3", errors ? "text-destructive" : "")} aria-hidden /> {errors}
               </span>
               <span className="flex items-center gap-1">
-                <AlertTriangle className={cn("size-3", warnings ? "text-yellow-500" : "")} /> {warnings}
+                <AlertTriangle className={cn("size-3", warnings ? "text-warn" : "")} aria-hidden /> {warnings}
               </span>
             </button>
           </PopoverTrigger>

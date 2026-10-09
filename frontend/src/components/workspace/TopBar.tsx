@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { ChevronLeft, GitFork, Globe, Loader2, Lock, Play, Share2, Square } from "lucide-react";
+import { ChevronLeft, GitFork, Globe, Loader2, Lock, Maximize2, Minimize2, Play, Share2, Square } from "lucide-react";
 import { toast } from "sonner";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { LogoMark } from "@/components/Logo";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { UserMenu } from "@/components/UserMenu";
 import { ShareDialog } from "@/components/workspace/ShareDialog";
 import { errorMessage } from "@/lib/api";
@@ -15,23 +15,23 @@ import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth";
 import { canEdit, useWorkspace } from "@/stores/workspace";
 
-function ContainerBadge() {
+function ContainerBadge({ compact }: { compact?: boolean }) {
   const container = useWorkspace((s) => s.container);
   const running = useWorkspace((s) => s.runStatus?.running);
   const map: Record<string, { label: string; dot: string }> = {
-    unknown: { label: "checking", dot: "bg-muted-foreground" },
-    starting: { label: "starting", dot: "bg-yellow-500 animate-pulse" },
-    running: { label: running ? "running" : "ready", dot: running ? "bg-green-500 animate-pulse" : "bg-green-500" },
-    stopped: { label: "stopped", dot: "bg-muted-foreground" },
-    missing: { label: "not started", dot: "bg-muted-foreground" },
-    error: { label: "error", dot: "bg-red-500" },
+    unknown: { label: "Checking", dot: "bg-muted-foreground/60" },
+    starting: { label: "Starting", dot: "bg-muted-foreground animate-pulse" },
+    running: { label: running ? "Running" : "Ready", dot: running ? "bg-live ring-4 ring-live/20" : "bg-live" },
+    stopped: { label: "Stopped", dot: "bg-muted-foreground/60" },
+    missing: { label: "Not started", dot: "bg-muted-foreground/60" },
+    error: { label: "Error", dot: "bg-destructive" },
   };
   const s = map[container] ?? map.unknown!;
   return (
-    <Badge variant="outline" className="gap-1.5 font-normal text-muted-foreground">
-      <span className={cn("size-2 rounded-full", s.dot)} />
-      {s.label}
-    </Badge>
+    <span className="flex shrink-0 items-center gap-2 text-[13px] text-muted-foreground" title={`Container: ${s.label}`}>
+      <span className={cn("size-2 rounded-full", s.dot)} aria-hidden />
+      <span className={cn(compact && "sr-only")}>{s.label}</span>
+    </span>
   );
 }
 
@@ -77,7 +77,11 @@ export function TopBar({ onStartContainer }: { onStartContainer: () => void }) {
       return;
     }
     const ws = useWorkspace.getState();
-    if (!running) ws.setToolTab(repl.config?.gui ? "display" : "console");
+    if (!running) {
+      ws.setToolTab(repl.config?.gui ? "display" : "console");
+      // Output needs somewhere to show: leave focus mode when a run starts.
+      ws.setFocus(false);
+    }
     if (runSend?.({ type: running ? "stop" : "start" })) {
       setPending(true);
       setTimeout(() => setPending(false), 4000);
@@ -103,26 +107,31 @@ export function TopBar({ onStartContainer }: { onStartContainer: () => void }) {
     }
   };
 
+  const focus = useWorkspace((s) => s.focus);
+  const setFocus = useWorkspace((s) => s.setFocus);
   const runDisabled = !editable || container === "starting" || (container === "running" && !runConnected) || pending;
 
   return (
-    <header className="flex h-12 shrink-0 items-center gap-2 border-b bg-card px-2">
+    <header className="flex h-14 shrink-0 items-center gap-1.5 px-2 sm:gap-2 sm:px-3">
       <Tooltip>
         <TooltipTrigger asChild>
           <Button variant="ghost" size="icon-sm" asChild>
-            <Link to={user ? "/dashboard" : "/"}>
+            <Link to={user ? "/dashboard" : "/"} aria-label={user ? "Back to your repls" : "Back to Replot"}>
               <ChevronLeft />
             </Link>
           </Button>
         </TooltipTrigger>
-        <TooltipContent>Back to my repls</TooltipContent>
+        <TooltipContent>{user ? "Back to your repls" : "Back to Replot"}</TooltipContent>
       </Tooltip>
-      <LogoMark className="size-5" />
-      <div className="flex min-w-0 items-center gap-2">
-        {!isOwner && <span className="hidden text-sm text-muted-foreground sm:inline">@{repl.owner.username} /</span>}
+      <LogoMark className="hidden size-5 sm:block" />
+      <div className="flex min-w-0 items-center gap-1.5">
+        {!isOwner && (
+          <span className="hidden shrink-0 text-sm text-muted-foreground lg:inline">@{repl.owner.username} /</span>
+        )}
         {editingName ? (
           <Input
             autoFocus
+            aria-label="Repl name"
             value={name}
             onChange={(e) => setName(e.target.value)}
             onBlur={() => void saveName()}
@@ -133,36 +142,44 @@ export function TopBar({ onStartContainer }: { onStartContainer: () => void }) {
                 setEditingName(false);
               }
             }}
-            className="h-7 w-56"
+            className="h-8 w-40 sm:w-56"
           />
         ) : (
           <button
             className={cn(
-              "truncate rounded px-1.5 py-0.5 text-sm font-medium",
-              isOwner && "hover:bg-accent",
+              "truncate rounded-md px-1.5 py-1 text-[15px] font-semibold tracking-[-0.01em]",
+              isOwner ? "hover:bg-snow" : "cursor-default",
             )}
-            title={isOwner ? "Click to rename" : repl.name}
+            title={isOwner ? "Rename" : repl.name}
             onClick={() => isOwner && setEditingName(true)}
           >
             {repl.name}
           </button>
         )}
         {repl.is_public ? (
-          <Globe className="size-3.5 shrink-0 text-muted-foreground" />
+          <Globe className="hidden size-3.5 shrink-0 text-muted-foreground sm:block" aria-label="Public" />
         ) : (
-          <Lock className="size-3.5 shrink-0 text-muted-foreground" />
+          <Lock className="hidden size-3.5 shrink-0 text-muted-foreground sm:block" aria-label="Private" />
         )}
+        <span className="ml-2 hidden md:block">
+          <ContainerBadge />
+        </span>
       </div>
 
-      <div className="mx-auto flex items-center gap-3">
+      <div className="ml-auto flex items-center gap-2 md:mx-auto">
+        <span className="md:hidden">
+          <ContainerBadge compact />
+        </span>
         <Button
           onClick={run}
           disabled={runDisabled}
           className={cn(
-            "h-8 min-w-24 font-semibold text-white",
-            running ? "bg-red-600 hover:bg-red-600/90" : "bg-[#f26207] hover:bg-[#f26207]/90",
+            "h-9 min-w-[5.5rem] rounded-[10px] px-4 font-semibold",
+            running
+              ? "bg-destructive text-white hover:bg-destructive/90 dark:text-[#2A1210]"
+              : "bg-live text-live-foreground hover:bg-live/90",
           )}
-          title={editable ? (running ? "Stop" : "Run") : "Fork this repl to run it"}
+          title={editable ? (running ? "Stop the program" : "Run the program") : "Fork this repl to run it"}
         >
           {pending || container === "starting" ? (
             <Loader2 className="animate-spin" />
@@ -173,18 +190,39 @@ export function TopBar({ onStartContainer }: { onStartContainer: () => void }) {
           )}
           {container === "starting" ? "Starting" : running ? "Stop" : "Run"}
         </Button>
-        <ContainerBadge />
       </div>
 
-      <div className="flex items-center gap-1">
-        <Button variant="ghost" size="sm" onClick={fork} disabled={forking}>
-          {forking ? <Loader2 className="animate-spin" /> : <GitFork />}
-          <span className="hidden md:inline">Fork</span>
-        </Button>
-        <Button variant="secondary" size="sm" onClick={() => setShareOpen(true)}>
-          <Share2 /> <span className="hidden md:inline">Share</span>
-        </Button>
-        <UserMenu />
+      <div className="flex items-center gap-0.5 md:ml-0">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant={focus ? "secondary" : "ghost"}
+              size="sm"
+              className="hidden md:inline-flex"
+              onClick={() => setFocus(!focus)}
+              aria-pressed={focus}
+            >
+              {focus ? <Minimize2 /> : <Maximize2 />}
+              <span className="hidden lg:inline">{focus ? "Leave focus" : "Focus"}</span>
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>
+            {focus ? "Bring back the side panes" : "Hide everything but the editor"} (Ctrl+Shift+F)
+          </TooltipContent>
+        </Tooltip>
+        {!focus && (
+          <>
+            <Button variant="ghost" size="sm" onClick={fork} disabled={forking} aria-label="Fork">
+              {forking ? <Loader2 className="animate-spin" /> : <GitFork />}
+              <span className="hidden lg:inline">Fork</span>
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setShareOpen(true)} aria-label="Share">
+              <Share2 /> <span className="hidden lg:inline">Share</span>
+            </Button>
+            <ThemeToggle className="hidden md:inline-flex" />
+            <UserMenu />
+          </>
+        )}
       </div>
       <ShareDialog open={shareOpen} onOpenChange={setShareOpen} />
     </header>

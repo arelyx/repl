@@ -10,6 +10,8 @@ import { imageMime, languageForPath } from "@/lib/languages";
 import { pathToUri, useLspStore } from "@/lib/lsp";
 import { replsApi } from "@/lib/repls";
 import { useAuthStore } from "@/stores/auth";
+import { useTheme } from "@/stores/theme";
+import { MONACO_THEME } from "@/lib/fjordThemes";
 
 type Phase = "loading" | "connecting" | "collab" | "rest" | "binary" | "error";
 type SaveState = "saved" | "dirty" | "saving" | "error";
@@ -31,6 +33,7 @@ export function CodeEditor({ replId, path, readOnly }: { replId: string; path: s
   const [peers, setPeers] = useState(0);
   const [mounted, setMounted] = useState(false);
   const lsp = useLspStore((s) => s.manager);
+  const themeMode = useTheme((s) => s.mode);
 
   const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null);
   const collabRef = useRef<CollabSession | null>(null);
@@ -229,7 +232,7 @@ export function CodeEditor({ replId, path, readOnly }: { replId: string; path: s
           <img
             src={`data:${mime};base64,${binary.content}`}
             alt={path}
-            className="max-h-[80%] max-w-full rounded border bg-[repeating-conic-gradient(#2b3245_0%_25%,#1c2333_0%_50%)] bg-[length:16px_16px]"
+            className="max-h-[80%] max-w-full rounded border bg-[repeating-conic-gradient(var(--mist)_0%_25%,var(--card)_0%_50%)] bg-[length:16px_16px]"
           />
         ) : (
           <>
@@ -243,28 +246,28 @@ export function CodeEditor({ replId, path, readOnly }: { replId: string; path: s
 
   return (
     <div className="relative flex h-full flex-col">
-      <div className="absolute top-1 right-4 z-10 flex items-center gap-2 rounded bg-card/80 px-2 py-0.5 text-[11px] text-muted-foreground">
+      <div className="pointer-events-none absolute right-5 bottom-3 z-10 flex items-center gap-1.5 rounded-full bg-card/90 px-2.5 py-0.5 text-xs text-muted-foreground">
         {phase === "connecting" && (
           <>
-            <Loader2 className="size-3 animate-spin" /> connecting
+            <Loader2 className="size-3 animate-spin" aria-hidden /> Connecting
           </>
         )}
         {phase === "collab" && (
           <>
-            <Users className="size-3 text-green-500" /> live{peers > 0 ? ` · ${peers + 1} here` : ""}
+            <Users className="size-3 text-live" aria-hidden /> {peers > 0 ? `Live with ${peers} other${peers === 1 ? "" : "s"}` : "Live"}
           </>
         )}
         {phase === "rest" && (
           <>
-            <WifiOff className="size-3" /> offline mode ·{" "}
-            {readOnly ? "read-only" : saveState === "saving" ? "saving…" : saveState === "dirty" ? "unsaved" : saveState === "error" ? "save failed" : "saved"}
+            <WifiOff className="size-3" aria-hidden /> Not live:{" "}
+            {readOnly ? "read-only" : saveState === "saving" ? "saving…" : saveState === "dirty" ? "unsaved changes" : saveState === "error" ? "save failed" : "saved to disk"}
           </>
         )}
-        {readOnly && phase !== "rest" && <span>· read-only</span>}
+        {readOnly && phase !== "rest" && <span>, read-only</span>}
       </div>
       <Editor
         height="100%"
-        theme="vs-dark"
+        theme={MONACO_THEME[themeMode]}
         language={languageForPath(path)}
         path={pathToUri(path)}
         defaultValue=""
@@ -273,12 +276,21 @@ export function CodeEditor({ replId, path, readOnly }: { replId: string; path: s
         options={{
           readOnly: readOnly || phase === "connecting",
           fontSize: 14,
+          fontFamily: '"Fragment Mono", ui-monospace, Menlo, monospace',
+          lineHeight: 22,
+          fontLigatures: false,
+          renderLineHighlight: "line",
+          lineNumbersMinChars: 3,
+          scrollbar: { verticalScrollbarSize: 10, horizontalScrollbarSize: 10, useShadows: false },
+          overviewRulerBorder: false,
+          overviewRulerLanes: 0,
+          hideCursorInOverviewRuler: true,
           minimap: { enabled: false },
           automaticLayout: true,
           scrollBeyondLastLine: false,
           tabSize: 4,
           renderWhitespace: "selection",
-          padding: { top: 8 },
+          padding: { top: 12, bottom: 12 },
           formatOnType: true,
           fixedOverflowWidgets: true,
           suggest: { showStatusBar: true, preview: true },

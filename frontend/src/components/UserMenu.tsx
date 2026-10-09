@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "react-router-dom";
-import { Compass, LayoutGrid, LogOut } from "lucide-react";
+import { Compass, LayoutGrid, LogOut, Moon, Sun } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -11,6 +11,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAuthStore } from "@/stores/auth";
+import { useTheme } from "@/stores/theme";
 
 export function initials(name: string) {
   return name
@@ -24,6 +25,8 @@ export function initials(name: string) {
 export function UserMenu() {
   const { user, logout } = useAuthStore();
   const navigate = useNavigate();
+  const themeMode = useTheme((s) => s.mode);
+  const toggleTheme = useTheme((s) => s.toggle);
 
   if (!user) {
     return (
@@ -42,7 +45,7 @@ export function UserMenu() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon-sm" className="rounded-full">
+        <Button variant="ghost" size="icon-sm" className="rounded-full" aria-label="Account menu">
           <Avatar className="size-7">
             <AvatarFallback className="bg-primary/20 text-primary">{initials(name)}</AvatarFallback>
           </Avatar>
@@ -55,10 +58,13 @@ export function UserMenu() {
         </DropdownMenuLabel>
         <DropdownMenuSeparator />
         <DropdownMenuItem onSelect={() => navigate("/dashboard")}>
-          <LayoutGrid /> My repls
+          <LayoutGrid /> Your repls
         </DropdownMenuItem>
         <DropdownMenuItem onSelect={() => navigate("/explore")}>
           <Compass /> Explore
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={toggleTheme}>
+          {themeMode === "dusk" ? <Sun /> : <Moon />} {themeMode === "dusk" ? "Switch to daylight" : "Switch to dusk"}
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem

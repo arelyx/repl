@@ -47,10 +47,10 @@ export function RegisterPage() {
   );
 
   return (
-    <Card>
+    <Card className="gap-5 px-1 sm:px-3">
       <CardHeader>
-        <CardTitle>Create your account</CardTitle>
-        <CardDescription>Start coding in seconds, in any language.</CardDescription>
+        <CardTitle className="text-2xl font-semibold tracking-[-0.01em]">Create your account</CardTitle>
+        <CardDescription>After this, pick a language and press Run.</CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={submit} className="space-y-4">
@@ -61,7 +61,7 @@ export function RegisterPage() {
             pattern: "[A-Za-z0-9_\\-]{3,32}",
             title: "3-32 letters, digits, _ or -",
           })}
-          {field("display_name", "Display name (optional)")}
+          {field("display_name", "Display name, optional")}
           {field("password", "Password", {
             type: "password",
             required: true,
@@ -70,11 +70,11 @@ export function RegisterPage() {
           })}
           {error && <p className="text-sm text-destructive">{error}</p>}
           <Button type="submit" className="w-full" disabled={busy}>
-            {busy && <Loader2 className="animate-spin" />} Sign up
+            {busy && <Loader2 className="animate-spin" />} Create account
           </Button>
-          <p className="text-center text-sm text-muted-foreground">
+          <p className="text-sm text-muted-foreground">
             Already have an account?{" "}
-            <Link to="/login" className="text-primary hover:underline">
+            <Link to="/login" className="font-medium text-primary underline-offset-4 hover:underline">
               Log in
             </Link>
           </p>

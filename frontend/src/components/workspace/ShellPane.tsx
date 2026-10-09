@@ -38,7 +38,7 @@ export function ShellPane({ visible }: { visible: boolean }) {
             sock.send({ type: "resize", cols: term.cols, rows: term.rows });
             term.focus();
           } else if (s === "closed") {
-            term.write("\r\n\x1b[90m[shell disconnected — click Reconnect]\x1b[0m\r\n");
+            term.write("\r\n\x1b[90m[Shell disconnected. Press Reconnect to start a new session.]\x1b[0m\r\n");
           }
         },
       },
@@ -63,11 +63,12 @@ export function ShellPane({ visible }: { visible: boolean }) {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex h-8 shrink-0 items-center gap-2 border-b px-2 text-xs text-muted-foreground">
+      <div className="flex h-9 shrink-0 items-center gap-2 px-4 text-[13px] text-muted-foreground">
         <span
+          aria-hidden
           className={
-            "size-2 rounded-full " +
-            (state === "open" ? "bg-green-500" : state === "connecting" ? "bg-yellow-500" : "bg-red-500/70")
+            "size-2 shrink-0 rounded-full " +
+            (state === "open" ? "bg-live" : state === "connecting" ? "bg-muted-foreground animate-pulse" : "bg-destructive/70")
           }
         />
         <span>
@@ -89,7 +90,7 @@ export function ShellPane({ visible }: { visible: boolean }) {
           <RotateCw /> Reconnect
         </Button>
       </div>
-      <div ref={containerRef} className="min-h-0 flex-1 bg-background" />
+      <div ref={containerRef} className="min-h-0 flex-1 bg-card pl-2" />
     </div>
   );
 }

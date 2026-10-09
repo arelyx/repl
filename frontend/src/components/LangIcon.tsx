@@ -33,7 +33,14 @@ function isEmoji(s: string) {
   return /\p{Extended_Pictographic}/u.test(s);
 }
 
-/** Small colored badge for a template/repl language. Uses the template's icon if it's an emoji. */
+export function langColor(language: string) {
+  return COLORS[(language || "").toLowerCase()] ?? "#2D6177";
+}
+
+/**
+ * Soft language tile: the language's own color diluted into the surface, with a solid swatch along the
+ * bottom edge. The label stays in the body color, so it passes contrast whatever the language color is.
+ */
 export function LangIcon({
   language,
   icon,
@@ -43,25 +50,33 @@ export function LangIcon({
   icon?: string | null;
   className?: string;
 }) {
+  const color = langColor(language);
+  const tint = { backgroundColor: `color-mix(in oklab, ${color} 18%, var(--card))` };
   if (icon && isEmoji(icon)) {
     return (
-      <span className={cn("flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-lg", className)}>
+      <span
+        className={cn("flex size-8 shrink-0 items-center justify-center rounded-lg text-base", className)}
+        style={tint}
+        aria-hidden
+      >
         {icon}
       </span>
     );
   }
   const key = (language || "").toLowerCase();
-  const color = COLORS[key] ?? "#f26207";
-  const label = (key === "cpp" ? "C++" : key === "csharp" ? "C#" : key.slice(0, 2)) || "?";
+  const label =
+    (key === "cpp" ? "C++" : key === "csharp" ? "C#" : key.charAt(0).toUpperCase() + key.slice(1, 2)) || "?";
   return (
     <span
       className={cn(
-        "flex size-8 shrink-0 items-center justify-center rounded-md text-[11px] font-bold uppercase text-white",
+        "relative flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-lg text-[12px] font-semibold text-foreground",
         className,
       )}
-      style={{ backgroundColor: color, textShadow: "0 1px 1px rgba(0,0,0,.4)" }}
+      style={tint}
+      aria-hidden
     >
       {label}
+      <span className="absolute inset-x-0 bottom-0 h-[3px]" style={{ backgroundColor: color }} />
     </span>
   );
 }

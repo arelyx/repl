@@ -25,8 +25,12 @@ interface WorkspaceState {
   openTabs: string[];
   activePath: string | null;
   toolTab: ToolTab;
+  /** Bumped on every setToolTab, so layouts can reveal the tool pane even when the tab is unchanged. */
+  toolTabSeq: number;
   /** Bumped after commits/restores so file views reload from disk. */
   fsEpoch: number;
+  /** Focus mode: side panes collapsed, chrome reduced to the essentials around the editor. */
+  focus: boolean;
 
   reset: (repl: Repl) => void;
   setRepl: (repl: Repl) => void;
@@ -40,6 +44,7 @@ interface WorkspaceState {
   onPathDeleted: (path: string) => void;
   setToolTab: (t: ToolTab) => void;
   bumpFsEpoch: () => void;
+  setFocus: (focus: boolean) => void;
 }
 
 const under = (p: string, dir: string) => p === dir || p.startsWith(dir + "/");
@@ -56,7 +61,9 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   openTabs: [],
   activePath: null,
   toolTab: "console",
+  toolTabSeq: 0,
   fsEpoch: 0,
+  focus: false,
 
   reset: (repl) =>
     set({
@@ -72,6 +79,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
       activePath: null,
       toolTab: repl.config?.gui ? "display" : "console",
       fsEpoch: 0,
+      focus: false,
     }),
   setRepl: (repl) => set({ repl }),
   setContainer: (container, error = null) => set({ container, containerError: error }),
@@ -114,8 +122,9 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
       activePath: activePath && under(activePath, path) ? (next[0] ?? null) : activePath,
     });
   },
-  setToolTab: (toolTab) => set({ toolTab }),
+  setToolTab: (toolTab) => set((s) => ({ toolTab, toolTabSeq: s.toolTabSeq + 1 })),
   bumpFsEpoch: () => set((s) => ({ fsEpoch: s.fsEpoch + 1 })),
+  setFocus: (focus) => set({ focus }),
 }));
 
 export const canEdit = (repl: Repl | null) => !!repl && repl.role !== "viewer";

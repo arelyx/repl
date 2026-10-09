@@ -65,23 +65,24 @@ export function ConsolePane({ visible }: { visible: boolean }) {
   else if (!runConnected) statusText = "Connecting…";
   else if (runStatus?.running) statusText = `Running: ${runStatus.command}`;
   else if (runStatus && runStatus.exitCode !== null) statusText = `Exited with code ${runStatus.exitCode}`;
-  else statusText = "Ready. Press Run.";
+  else statusText = "Ready. Press Run to start your program.";
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex h-8 shrink-0 items-center gap-2 border-b px-2 text-xs text-muted-foreground">
+      <div className="flex h-9 shrink-0 items-center gap-2 px-4 text-[13px] text-muted-foreground">
         <span
+          aria-hidden
           className={
-            "size-2 rounded-full " +
-            (runStatus?.running ? "bg-green-500" : runConnected ? "bg-muted-foreground" : "bg-red-500/70")
+            "size-2 shrink-0 rounded-full " +
+            (runStatus?.running ? "bg-live" : runConnected ? "bg-muted-foreground/60" : "bg-destructive/70")
           }
         />
         <span className="truncate">{statusText}</span>
-        <Button variant="ghost" size="icon-xs" className="ml-auto" title="Clear console" onClick={() => term?.clear()}>
+        <Button variant="ghost" size="icon-xs" className="ml-auto" title="Clear console" aria-label="Clear console" onClick={() => term?.clear()}>
           <Eraser />
         </Button>
       </div>
-      <div ref={containerRef} className="min-h-0 flex-1 bg-background" />
+      <div ref={containerRef} className="min-h-0 flex-1 bg-card pl-2" />
     </div>
   );
 }

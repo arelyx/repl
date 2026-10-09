@@ -56,17 +56,17 @@ export function WebviewPane() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex h-9 shrink-0 items-center gap-1.5 border-b px-2">
-        <Button variant="ghost" size="icon-xs" title="Reload" disabled={!url} onClick={() => setNonce((n) => n + 1)}>
+      <div className="flex h-10 shrink-0 items-center gap-1.5 px-2">
+        <Button variant="ghost" size="icon-sm" title="Reload" aria-label="Reload preview" disabled={!url} onClick={() => setNonce((n) => n + 1)}>
           <RotateCw />
         </Button>
-        <div className="flex h-6 min-w-0 flex-1 items-center gap-1.5 rounded bg-muted px-2 font-mono text-xs text-muted-foreground">
-          <Globe className="size-3 shrink-0" />
-          <span className="truncate">{url ?? "No web server"}</span>
+        <div className="flex h-8 min-w-0 flex-1 items-center gap-1.5 rounded-full bg-background px-3 font-mono text-xs text-muted-foreground">
+          <Globe className="size-3 shrink-0" aria-hidden />
+          <span className="truncate">{url ?? "No web server yet"}</span>
         </div>
         {ports.length > 0 && (
           <Select value={port ? String(port) : undefined} onValueChange={(v) => setPort(Number(v))}>
-            <SelectTrigger size="sm" className="h-6 w-24 text-xs">
+            <SelectTrigger size="sm" className="h-8 w-24 rounded-full text-xs" aria-label="Port">
               <SelectValue placeholder="Port" />
             </SelectTrigger>
             <SelectContent>
@@ -78,7 +78,7 @@ export function WebviewPane() {
             </SelectContent>
           </Select>
         )}
-        <Button variant="ghost" size="icon-xs" title="Open in new tab" disabled={!url} asChild={!!url}>
+        <Button variant="ghost" size="icon-sm" title="Open in new tab" aria-label="Open preview in a new tab" disabled={!url} asChild={!!url}>
           {url ? (
             <a href={url} target="_blank" rel="noreferrer">
               <ExternalLink />
@@ -98,8 +98,10 @@ export function WebviewPane() {
         />
       ) : (
         <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center text-sm text-muted-foreground">
-          <Globe className="size-8 opacity-40" />
-          No web server running — start one and it'll show up here
+          <Globe className="size-8 opacity-40" aria-hidden />
+          <p className="max-w-[34ch]">
+            Start a web server on any port and the page opens here. For Flask or Express, press Run.
+          </p>
         </div>
       )}
     </div>

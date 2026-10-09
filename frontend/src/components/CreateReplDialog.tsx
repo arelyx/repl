@@ -87,21 +87,22 @@ export function CreateReplDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex max-h-[90vh] flex-col sm:max-w-3xl">
         <DialogHeader>
-          <DialogTitle>Create a repl</DialogTitle>
-          <DialogDescription>Pick a template, name it, and you're off.</DialogDescription>
+          <DialogTitle className="text-xl font-semibold tracking-[-0.01em]">New repl</DialogTitle>
+          <DialogDescription>Pick a template and give it a name. Double-click a template to create it right away.</DialogDescription>
         </DialogHeader>
         <div className="relative">
           <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             autoFocus
-            placeholder="Search languages and frameworks…"
+            placeholder="Search languages and frameworks"
+            aria-label="Search templates"
             className="pl-9"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
         </div>
-        <ScrollArea className="h-[45vh] rounded-md border">
-          <div className="space-y-5 p-3">
+        <ScrollArea className="h-[45vh] rounded-[14px] bg-background">
+          <div className="space-y-6 p-3 sm:p-4">
             {error && <p className="text-sm text-destructive">Failed to load templates: {error}</p>}
             {!templates && !error && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -113,22 +114,23 @@ export function CreateReplDialog({
             )}
             {grouped.map((g) => (
               <div key={g.category}>
-                <div className="mb-2 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
+                <div className="mb-2 px-1 text-sm font-medium text-muted-foreground">
                   {CATEGORY_LABELS[g.category] ?? g.category}
                 </div>
-                <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
+                <div className="grid grid-cols-1 gap-1.5 min-[420px]:grid-cols-2 md:grid-cols-3">
                   {g.items.map((t) => (
                     <button
                       key={t.slug}
                       type="button"
+                      aria-pressed={selected === t.slug}
                       onClick={() => setSelected(t.slug)}
                       onDoubleClick={() => {
                         setSelected(t.slug);
                         void create();
                       }}
                       className={cn(
-                        "flex items-center gap-3 rounded-md border p-2 text-left transition-colors hover:bg-accent",
-                        selected === t.slug && "border-primary bg-primary/10",
+                        "flex items-center gap-3 rounded-[10px] bg-card p-2.5 text-left transition-colors hover:bg-[color-mix(in_oklab,var(--card),var(--fjord)_6%)]",
+                        selected === t.slug && "bg-[color-mix(in_oklab,var(--card),var(--fjord)_12%)] ring-2 ring-primary ring-inset",
                       )}
                     >
                       <LangIcon language={t.language} icon={t.icon} />

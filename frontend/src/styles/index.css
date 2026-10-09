@@ -19,6 +19,16 @@
 }
 
 @theme inline {
+    --font-sans: "Schibsted Grotesk Variable", "Schibsted Grotesk", ui-sans-serif, sans-serif;
+    --font-mono: "Fragment Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+    --color-live: var(--live);
+    --color-live-foreground: var(--live-foreground);
+    --color-warn: var(--warn);
+    --color-frost: var(--frost);
+    --color-snow: var(--snow);
+    --color-mist: var(--mist);
+    --color-editor: var(--editor);
+    --shadow-float: var(--float-shadow);
     --radius-sm: calc(var(--radius) - 4px);
     --radius-md: calc(var(--radius) - 2px);
     --radius-lg: var(--radius);
@@ -60,72 +70,73 @@
 }
 
 :root {
+    /* Fjord: daylight */
+    --frost: #E8EDEF;
+    --snow: #F7F9F9;
+    --mist: #DDE5E8;
+    --slate: #2E3D45;
+    --shale: #53656E;
+    --fjord: #2D6177;
+    --lichen: #56692F;
+    --lingon: #A23C3C;
+    --float-shadow: 0 18px 40px -18px rgb(30 52 64 / 0.35), 0 2px 6px -2px rgb(30 52 64 / 0.12);
+
     --radius: 0.625rem;
-    --background: oklch(1 0 0);
-    --foreground: oklch(0.145 0 0);
-    --card: oklch(1 0 0);
-    --card-foreground: oklch(0.145 0 0);
-    --popover: oklch(1 0 0);
-    --popover-foreground: oklch(0.145 0 0);
-    --primary: oklch(0.205 0 0);
-    --primary-foreground: oklch(0.985 0 0);
-    --secondary: oklch(0.97 0 0);
-    --secondary-foreground: oklch(0.205 0 0);
-    --muted: oklch(0.97 0 0);
-    --muted-foreground: oklch(0.556 0 0);
-    --accent: oklch(0.97 0 0);
-    --accent-foreground: oklch(0.205 0 0);
-    --destructive: oklch(0.577 0.245 27.325);
-    --border: oklch(0.922 0 0);
-    --input: oklch(0.922 0 0);
-    --ring: oklch(0.708 0 0);
-    --chart-1: oklch(0.646 0.222 41.116);
-    --chart-2: oklch(0.6 0.118 184.704);
-    --chart-3: oklch(0.398 0.07 227.392);
-    --chart-4: oklch(0.828 0.189 84.429);
-    --chart-5: oklch(0.769 0.188 70.08);
-    --sidebar: oklch(0.985 0 0);
-    --sidebar-foreground: oklch(0.145 0 0);
-    --sidebar-primary: oklch(0.205 0 0);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.97 0 0);
-    --sidebar-accent-foreground: oklch(0.205 0 0);
-    --sidebar-border: oklch(0.922 0 0);
-    --sidebar-ring: oklch(0.708 0 0);
+    --background: var(--frost);
+    --foreground: var(--slate);
+    --card: var(--snow);
+    --card-foreground: var(--slate);
+    --popover: var(--snow);
+    --popover-foreground: var(--slate);
+    --primary: var(--fjord);
+    --primary-foreground: #FFFFFF;
+    --secondary: var(--mist);
+    --secondary-foreground: var(--slate);
+    --muted: var(--mist);
+    --muted-foreground: var(--shale);
+    --accent: var(--mist);
+    --accent-foreground: var(--slate);
+    --destructive: var(--lingon);
+    --border: #CFD9DD;
+    --input: #C3CFD4;
+    --ring: var(--fjord);
+    --live: var(--lichen);
+    --live-foreground: #FFFFFF;
+    --chart-1: var(--fjord);
+    --chart-2: var(--lichen);
+    --chart-3: #7A4F7D;
+    --chart-4: #2F6F6A;
+    --chart-5: var(--lingon);
+    --sidebar: var(--snow);
+    --sidebar-foreground: var(--slate);
+    --sidebar-primary: var(--fjord);
+    --sidebar-primary-foreground: #FFFFFF;
+    --sidebar-accent: var(--mist);
+    --sidebar-accent-foreground: var(--slate);
+    --sidebar-border: var(--border);
+    --sidebar-ring: var(--fjord);
+    --editor: var(--snow);
+    color-scheme: light;
 }
 
 .dark {
-    --background: oklch(0.145 0 0);
-    --foreground: oklch(0.985 0 0);
-    --card: oklch(0.205 0 0);
-    --card-foreground: oklch(0.985 0 0);
-    --popover: oklch(0.205 0 0);
-    --popover-foreground: oklch(0.985 0 0);
-    --primary: oklch(0.922 0 0);
-    --primary-foreground: oklch(0.205 0 0);
-    --secondary: oklch(0.269 0 0);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.269 0 0);
-    --muted-foreground: oklch(0.708 0 0);
-    --accent: oklch(0.269 0 0);
-    --accent-foreground: oklch(0.985 0 0);
-    --destructive: oklch(0.704 0.191 22.216);
-    --border: oklch(1 0 0 / 10%);
-    --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.556 0 0);
-    --chart-1: oklch(0.488 0.243 264.376);
-    --chart-2: oklch(0.696 0.17 162.48);
-    --chart-3: oklch(0.769 0.188 70.08);
-    --chart-4: oklch(0.627 0.265 303.9);
-    --chart-5: oklch(0.645 0.246 16.439);
-    --sidebar: oklch(0.205 0 0);
-    --sidebar-foreground: oklch(0.985 0 0);
-    --sidebar-primary: oklch(0.488 0.243 264.376);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.269 0 0);
-    --sidebar-accent-foreground: oklch(0.985 0 0);
-    --sidebar-border: oklch(1 0 0 / 10%);
-    --sidebar-ring: oklch(0.556 0 0);
+    /* Fjord: dusk */
+    --frost: #161E23;
+    --snow: #1E272D;
+    --mist: #2A353C;
+    --slate: #D6DFE3;
+    --shale: #93A4AD;
+    --fjord: #8DBBD0;
+    --lichen: #A7BC79;
+    --lingon: #E28B83;
+    --float-shadow: 0 18px 40px -16px rgb(0 0 0 / 0.55), 0 2px 6px -2px rgb(0 0 0 / 0.3);
+
+    --primary-foreground: #14262F;
+    --live-foreground: #16200A;
+    --border: #2E3A41;
+    --input: #3A4850;
+    --sidebar-primary-foreground: #14262F;
+    color-scheme: dark;
 }
 
 @layer base {
@@ -133,15 +144,23 @@
     @apply border-border outline-ring/50;
     }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "ss01", "cv11";
     }
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+  ::selection {
+    background: color-mix(in oklab, var(--fjord) 28%, transparent);
+  }
 }
 
 /* Remote collaboration cursor decorations (y-monaco) */
 .yRemoteSelectionHead::after {
   position: absolute;
   font-size: 11px;
-  font-family: system-ui, sans-serif;
+  font-family: var(--font-sans);
   line-height: 1;
   padding: 2px 4px;
   border-radius: 3px 3px 3px 0;
@@ -158,30 +177,68 @@
   box-sizing: content-box;
 }
 
-/* ── Replot dark IDE theme (2020 Replit vibe) ── */
-.dark {
-    --background: #0e1525;
-    --foreground: #f5f9fc;
-    --card: #1c2333;
-    --card-foreground: #f5f9fc;
-    --popover: #1c2333;
-    --popover-foreground: #f5f9fc;
-    --primary: #f26207;
-    --primary-foreground: #ffffff;
-    --secondary: #2b3245;
-    --secondary-foreground: #f5f9fc;
-    --muted: #2b3245;
-    --muted-foreground: #9da2a6;
-    --accent: #2b3245;
-    --accent-foreground: #f5f9fc;
-    --border: #2b3245;
-    --input: #3c445c;
-    --ring: #f26207;
-    --sidebar: #1c2333;
-    --sidebar-foreground: #c2c8cc;
-    --sidebar-border: #2b3245;
-}
-
 html, body, #root { height: 100%; }
 
 .xterm { padding: 6px; height: 100%; }
+
+/* Workspace pane resize handles sit in the gutters between islands. */
+.pane-gutter {
+  position: relative;
+  width: 6px;
+  background: transparent;
+}
+.pane-gutter::after {
+  content: "";
+  position: absolute;
+  inset: 30% 2px;
+  border-radius: 999px;
+  background: transparent;
+  transition: background-color 120ms;
+}
+.pane-gutter:hover::after,
+.pane-gutter[data-separator="active"]::after,
+.pane-gutter:focus-visible::after {
+  background: color-mix(in oklab, var(--fjord) 55%, transparent);
+}
+
+/* The landing waterline: a repl resting on still water. */
+.waterline-water {
+  mask-image: linear-gradient(to bottom, rgb(0 0 0 / 0.42), transparent 85%);
+  -webkit-mask-image: linear-gradient(to bottom, rgb(0 0 0 / 0.42), transparent 85%);
+  pointer-events: none;
+  user-select: none;
+}
+.waterline-reflection {
+  transform: scaleY(-1);
+  filter: blur(1.2px);
+  animation: settle 1.6s cubic-bezier(0.2, 0.7, 0.2, 1) 0.15s both;
+}
+@keyframes settle {
+  from { filter: blur(8px); transform: scaleY(-1) translateY(-6px) scaleX(1.02); opacity: 0.2; }
+  to { filter: blur(1.2px); transform: scaleY(-1); opacity: 1; }
+}
+
+/* Syntax colors for static code samples (match the Monaco themes). */
+:root {
+  --warn: #80621A;
+  --water: #DCE4E7;
+  --syn-fn: #3E528F;
+  --syn-num: #7A4F7D;
+  --syn-comment: #617380;
+}
+.dark {
+  --warn: #D8B86A;
+  --water: #11181C;
+  --syn-fn: #AFC3F0;
+  --syn-num: #C9A0CF;
+  --syn-comment: #7F909A;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

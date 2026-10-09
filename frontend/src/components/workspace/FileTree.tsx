@@ -224,8 +224,8 @@ export function FileTree() {
     const row = (
       <div
         className={cn(
-          "group flex h-7 cursor-pointer items-center gap-1 pr-1 text-sm text-sidebar-foreground select-none hover:bg-accent/60",
-          activePath === node.path && "bg-accent text-foreground",
+          "group mx-1.5 flex h-8 cursor-pointer items-center gap-1.5 rounded-md pr-1 text-sm text-sidebar-foreground select-none hover:bg-mist/60 md:h-7",
+          activePath === node.path && "bg-mist font-medium text-foreground",
         )}
         style={{ paddingLeft: 8 + depth * 12 }}
         onClick={() => (node.type === "dir" ? toggle(node.path) : openFile(node.path))}
@@ -235,9 +235,9 @@ export function FileTree() {
           <>
             {isOpen ? <ChevronDown className="size-3.5 shrink-0" /> : <ChevronRight className="size-3.5 shrink-0" />}
             {isOpen ? (
-              <FolderOpen className="size-4 shrink-0 text-primary/80" />
+              <FolderOpen className="size-4 shrink-0 text-primary" />
             ) : (
-              <Folder className="size-4 shrink-0 text-primary/80" />
+              <Folder className="size-4 shrink-0 text-primary" />
             )}
           </>
         ) : (
@@ -250,7 +250,8 @@ export function FileTree() {
         {editable && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-              <Button variant="ghost" size="icon-xs" className="ml-auto opacity-0 group-hover:opacity-100 data-[state=open]:opacity-100">
+              <Button variant="ghost" size="icon-xs" aria-label={`Actions for ${node.name}`}
+                className="ml-auto opacity-0 group-hover:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100 [@media(pointer:coarse)]:opacity-60">
                 <MoreHorizontal />
               </Button>
             </DropdownMenuTrigger>
@@ -304,27 +305,27 @@ export function FileTree() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex h-9 shrink-0 items-center gap-0.5 border-b px-2">
-        <span className="mr-auto text-xs font-semibold tracking-wider text-muted-foreground uppercase">Files</span>
+      <div className="flex h-9 shrink-0 items-center gap-0.5 px-2">
+        <span className="mr-auto" />
         {editable && (
           <>
-            <Button variant="ghost" size="icon-xs" title="New file" onClick={() => create("", "file")}>
+            <Button variant="ghost" size="icon-xs" title="New file" aria-label="New file" onClick={() => create("", "file")}>
               <FilePlus />
             </Button>
-            <Button variant="ghost" size="icon-xs" title="New folder" onClick={() => create("", "dir")}>
+            <Button variant="ghost" size="icon-xs" title="New folder" aria-label="New folder" onClick={() => create("", "dir")}>
               <FolderPlus />
             </Button>
-            <Button variant="ghost" size="icon-xs" title="Upload files" onClick={() => startUpload("")}>
+            <Button variant="ghost" size="icon-xs" title="Upload files" aria-label="Upload files" onClick={() => startUpload("")}>
               <Upload />
             </Button>
           </>
         )}
-        <Button variant="ghost" size="icon-xs" title="Download as zip" asChild>
+        <Button variant="ghost" size="icon-xs" title="Download as zip" aria-label="Download as zip" asChild>
           <a href={replsApi.downloadUrl(repl.id)} download>
             <Download />
           </a>
         </Button>
-        <Button variant="ghost" size="icon-xs" title="Refresh" onClick={() => void refresh()}>
+        <Button variant="ghost" size="icon-xs" title="Refresh" aria-label="Refresh files" onClick={() => void refresh()}>
           <RefreshCw />
         </Button>
       </div>
@@ -334,9 +335,9 @@ export function FileTree() {
             <ScrollArea className="h-full">
               <div className="py-1">
                 {!filesLoaded ? (
-                  <div className="px-3 py-2 text-xs text-muted-foreground">Loading…</div>
+                  <div className="px-4 py-2 text-[13px] text-muted-foreground">Loading files…</div>
                 ) : tree.length === 0 ? (
-                  <div className="px-3 py-2 text-xs text-muted-foreground">No files yet.</div>
+                  <div className="px-4 py-2 text-[13px] text-muted-foreground">No files yet. Create one with the + button.</div>
                 ) : (
                   tree.map((n) => renderNode(n, 0))
                 )}

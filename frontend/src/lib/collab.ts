@@ -2,7 +2,7 @@ import * as Y from "yjs";
 import { HocuspocusProvider } from "@hocuspocus/provider";
 import { wsBase } from "@/lib/api";
 
-const COLORS = ["#f26207", "#0079f2", "#00b37e", "#a259ff", "#ff4d8d", "#e5b400", "#00b8d9", "#ff6b4a"];
+const COLORS = ["#2D6177", "#7A4F7D", "#56692F", "#A23C3C", "#3E528F", "#2F6F6A", "#80621A", "#8B4F8E"];
 export const randomColor = () => COLORS[Math.floor(Math.random() * COLORS.length)]!;
 
 /** One color per browser session, so a user's cursor keeps its color across files. */
@@ -49,7 +49,7 @@ export function openCollab(
       if (clientId === ydoc.clientID) return;
       const u = (state as { user?: { name?: string; color?: string } }).user;
       if (!u) return;
-      const color = u.color || "#f26207";
+      const color = u.color || "#2D6177";
       const name = String(u.name || "anonymous").replace(/["\\\n]/g, "");
       rules.push(
         `.yRemoteSelection-${clientId}{background-color:${color}40;}`,
