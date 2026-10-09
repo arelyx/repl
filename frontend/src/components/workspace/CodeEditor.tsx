@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { errorMessage } from "@/lib/api";
 import { myColor, openCollab, type CollabSession } from "@/lib/collab";
 import { imageMime, languageForPath } from "@/lib/languages";
+import { pathToUri, useLspStore } from "@/lib/lsp";
 import { replsApi } from "@/lib/repls";
 import { useAuthStore } from "@/stores/auth";
 
@@ -28,6 +29,8 @@ export function CodeEditor({ replId, path, readOnly }: { replId: string; path: s
   const [binary, setBinary] = useState<{ content: string } | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [peers, setPeers] = useState(0);
+  const [mounted, setMounted] = useState(false);
+  const lsp = useLspStore((s) => s.manager);
 
   const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null);
   const collabRef = useRef<CollabSession | null>(null);
@@ -56,6 +59,7 @@ export function CodeEditor({ replId, path, readOnly }: { replId: string; path: s
       try {
         await replsApi.writeFile(replId, path, content);
         setSaveState("saved");
+        useLspStore.getState().manager?.didSave(path);
         if (!silent) toast.success(`Saved ${path}`, { duration: 1200 });
       } catch (e) {
         setSaveState("error");
@@ -172,6 +176,7 @@ export function CodeEditor({ replId, path, readOnly }: { replId: string; path: s
     }
     ed.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => void saveRef.current(false));
     ed.focus();
+    setMounted(true);
   };
 
   // When we fall back to REST before the editor mounted its content, seed it.
@@ -183,6 +188,17 @@ export function CodeEditor({ replId, path, readOnly }: { replId: string; path: s
     }
     if (phase === "collab") tryBind();
   }, [phase, tryBind]);
+
+  // Language server: register the document once the model holds the real text
+  // (after the Yjs binding or the REST load). Viewers never connect.
+  useEffect(() => {
+    if (!lsp || readOnly || !mounted || (phase !== "collab" && phase !== "rest")) return;
+    const ed = editorRef.current;
+    const model = ed?.getModel();
+    if (!ed || !model || (phase === "collab" && !bindingRef.current)) return;
+    const sub = lsp.attach(ed, model, path);
+    return () => sub.dispose();
+  }, [lsp, readOnly, mounted, phase, path]);
 
   const onChange = () => {
     if (applyingRef.current || readOnly || phaseRef.current !== "rest") return;
@@ -250,7 +266,7 @@ export function CodeEditor({ replId, path, readOnly }: { replId: string; path: s
         height="100%"
         theme="vs-dark"
         language={languageForPath(path)}
-        path={`${replId}/${path}`}
+        path={pathToUri(path)}
         defaultValue=""
         onMount={onMount}
         onChange={onChange}
@@ -263,6 +279,9 @@ export function CodeEditor({ replId, path, readOnly }: { replId: string; path: s
           tabSize: 4,
           renderWhitespace: "selection",
           padding: { top: 8 },
+          formatOnType: true,
+          fixedOverflowWidgets: true,
+          suggest: { showStatusBar: true, preview: true },
         }}
       />
     </div>
