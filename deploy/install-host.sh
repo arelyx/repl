@@ -1,11 +1,11 @@
 #!/bin/bash
-# Host setup for a Replot server. Idempotent; run as root from the repo root
+# Host setup for a Repl server. Idempotent; run as root from the repo root
 # after Docker and gVisor (runsc) are installed:
 #
 #   sudo deploy/install-host.sh
 #
 # Installs the repl egress firewall, the kernel-module blocklist, and the
-# replot-repls.slice parent cgroup sized from this host's cores and RAM, and
+# repl-containers.slice parent cgroup sized from this host's cores and RAM, and
 # checks the rest of what production expects (runsc runtime, systemd-oomd,
 # no swap for repls).
 set -euo pipefail
@@ -23,23 +23,23 @@ repl_mb=$(( mem_mb > RESERVED_MB + 2048 ? mem_mb - RESERVED_MB : 2048 ))
 # MemoryHigh starts reclaim (page cache first) a little before MemoryMax.
 high_mb=$(( repl_mb * 95 / 100 ))
 
-install -d /opt/replot
-install -m 0755 firewall.sh /opt/replot/firewall.sh
-install -m 0644 replot-firewall.service /etc/systemd/system/
-install -m 0644 modprobe-replot.conf /etc/modprobe.d/replot-hardening.conf
+install -d /opt/repl
+install -m 0755 firewall.sh /opt/repl/firewall.sh
+install -m 0644 repl-firewall.service /etc/systemd/system/
+install -m 0644 modprobe-repl.conf /etc/modprobe.d/repl-hardening.conf
 sed -e "s/^CPUQuota=.*/CPUQuota=$(( repl_cores * 100 ))%/" \
     -e "s/^MemoryMax=.*/MemoryMax=${repl_mb}M/" \
     -e "s/^MemoryHigh=.*/MemoryHigh=${high_mb}M/" \
     -e "s/(32 cores, 29 GB)/(${cores} cores, $(( mem_mb / 1024 )) GB)/" \
-    replot-repls.slice > /etc/systemd/system/replot-repls.slice
+    repl-containers.slice > /etc/systemd/system/repl-containers.slice
 
 systemctl daemon-reload
-systemctl enable --now replot-firewall.service
-systemctl start replot-repls.slice
+systemctl enable --now repl-firewall.service
+systemctl start repl-containers.slice
 # Unload anything the blocklist names that is already loaded.
 for m in algif_aead esp4 esp6 af_rxrpc rxrpc; do modprobe -r "$m" 2>/dev/null || true; done
 
-echo "replot-repls.slice: CPUQuota=$(( repl_cores * 100 ))% MemoryMax=${repl_mb}M" \
+echo "repl-containers.slice: CPUQuota=$(( repl_cores * 100 ))% MemoryMax=${repl_mb}M" \
      "(host: ${cores} cores, ${mem_mb} MB; reserved ${RESERVED_CORES} cores, ${RESERVED_MB} MB)"
 
 warn=0
@@ -48,8 +48,9 @@ if ! docker info --format '{{json .Runtimes}}' | grep -q '"runsc"'; then
   warn=1
 fi
 if ! systemctl is-active --quiet systemd-oomd; then
-  echo "WARNING: systemd-oomd is not running (apt install systemd-oomd)." >&2
-  warn=1
+  # The slice's MemoryMax already confines repl OOMs to repls; oomd adds
+  # pressure-based kills on a dedicated host.
+  echo "note: systemd-oomd is not running (optional; apt install systemd-oomd)." >&2
 fi
 if [ "$(awk '/^SwapTotal:/ {print $2}' /proc/meminfo)" != 0 ]; then
   echo "note: host swap is on. Repls get none (MemorySwapMax=0, memswap = mem)," \

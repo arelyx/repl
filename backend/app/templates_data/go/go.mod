@@ -1,3 +1,3 @@
-module replot/main
+module repl/main
 
 go 1.27

@@ -1,6 +1,6 @@
 # Weekly: bump runner/Dockerfile toolchain pins to the latest stable
 # releases and open a PR. Building and smoke-testing the image (which runs
-# `replot-versions`) happens before merging. Requires "Allow GitHub Actions to
+# `repl-versions`) happens before merging. Requires "Allow GitHub Actions to
 # create and approve pull requests" in the repository settings.
 name: Toolchain freshness
 

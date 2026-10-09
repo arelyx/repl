@@ -17,7 +17,7 @@ GEMFILE
 # No CHECKSUMS section: --local cannot fetch them, and frozen mode rejects empty ones.
 (cd "$dir" && BUNDLE_LOCKFILE_CHECKSUMS=false BUNDLE_GEMFILE="$dir/Gemfile" bundle lock --local)
 (cd /tmp && BUNDLE_GEMFILE="$dir/Gemfile" BUNDLE_FROZEN=true bundle exec ruby -e "require %q(ruby_lsp/internal)")
-cat > /usr/local/bin/replot-ruby-lsp <<'SH'
+cat > /usr/local/bin/repl-ruby-lsp <<'SH'
 #!/bin/sh
 # ruby-lsp launcher: the image's prebuilt bundle unless the project has a Gemfile.
 if [ -z "$BUNDLE_GEMFILE" ] && [ ! -f Gemfile ] && [ ! -f gems.rb ]; then
@@ -26,7 +26,7 @@ if [ -z "$BUNDLE_GEMFILE" ] && [ ! -f Gemfile ] && [ ! -f gems.rb ]; then
 fi
 exec ruby-lsp "$@"
 SH
-chmod 755 /usr/local/bin/replot-ruby-lsp
+chmod 755 /usr/local/bin/repl-ruby-lsp
 # Only touch what lacks the bits: a blanket chmod -R would copy all of
 # /opt/ruby (a lower image layer) into this one.
 find /opt/ruby "$dir" ! -type l \( ! -perm -o+r -o -perm -u+x ! -perm -o+x \) -exec chmod a+rX {} +

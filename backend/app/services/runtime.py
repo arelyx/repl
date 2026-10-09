@@ -15,7 +15,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.config import settings
 
-log = logging.getLogger("replot.runtime")
+log = logging.getLogger("repl.runtime")
 
 _client = None
 # Start/stop for one repl must not interleave (the editor, the page and a
@@ -122,7 +122,7 @@ def _create_network(name: str, repl_id: str):
     client = docker_client()
     pool = ipaddress.ip_network(settings.REPL_SUBNET_POOL)
     used = set()
-    for net in client.networks.list(filters={"label": "replot.repl"}):
+    for net in client.networks.list(filters={"label": "repl.id"}):
         for cfg in (net.attrs.get("IPAM") or {}).get("Config") or []:
             if cfg.get("Subnet"):
                 used.add(cfg["Subnet"])
@@ -131,7 +131,7 @@ def _create_network(name: str, repl_id: str):
             continue
         ipam = IPAMConfig(pool_configs=[IPAMPool(subnet=str(subnet))])
         try:
-            return client.networks.create(name, driver="bridge", ipam=ipam, labels={"replot.repl": repl_id})
+            return client.networks.create(name, driver="bridge", ipam=ipam, labels={"repl.id": repl_id})
         except docker.errors.APIError as e:
             msg = str(e)
             if "network with name" in msg and "already exists" in msg:
@@ -146,8 +146,8 @@ def _create_network(name: str, repl_id: str):
 def reconnect_gateways() -> None:
     """After nginx/backend are recreated they lose their per-repl networks;
     reattach them so running repls stay reachable."""
-    for net in docker_client().networks.list(filters={"label": "replot.repl"}):
-        repl_id = net.attrs.get("Labels", {}).get("replot.repl")
+    for net in docker_client().networks.list(filters={"label": "repl.id"}):
+        repl_id = net.attrs.get("Labels", {}).get("repl.id")
         if repl_id:
             try:
                 _ensure_network(repl_id)
@@ -211,8 +211,8 @@ def _container_kwargs(repl_id: str, user_id: str | None) -> dict:
         # via /proc/1/fd/1, so rotate it.
         log_config=LogConfig(type="json-file", config={
             "max-size": settings.REPL_LOG_MAX_SIZE, "max-file": str(settings.REPL_LOG_MAX_FILE)}),
-        labels={"replot.repl": repl_id, "replot.user": str(user_id or "")},
-        environment={"REPL_ID": repl_id, "REPLOT_AGENT_TOKEN": agent_token(repl_id)},
+        labels={"repl.id": repl_id, "repl.user": str(user_id or "")},
+        environment={"REPL_ID": repl_id, "REPL_AGENT_TOKEN": agent_token(repl_id)},
     )
     if settings.REPL_RUNTIME:
         kwargs["runtime"] = settings.REPL_RUNTIME
@@ -264,7 +264,7 @@ def _check_quota(repl_id: str) -> None:
 
 
 def _running() -> list:
-    return docker_client().containers.list(filters={"label": "replot.repl", "status": "running"})
+    return docker_client().containers.list(filters={"label": "repl.id", "status": "running"})
 
 
 def _created_ts(c) -> float:
@@ -310,14 +310,14 @@ def _ensure_started_locked(repl_id: str, user_id: str | None) -> list[str]:
     _check_quota(repl_id)
     _ensure_network(repl_id)
     with _caps_lock:
-        others = [x for x in _running() if x.labels.get("replot.repl") != repl_id]
+        others = [x for x in _running() if x.labels.get("repl.id") != repl_id]
         victims = []
         if user_id and settings.MAX_RUNNING_PER_USER > 0:
-            mine = [x for x in others if x.labels.get("replot.user") == str(user_id)]
+            mine = [x for x in others if x.labels.get("repl.user") == str(user_id)]
             excess = len(mine) - (settings.MAX_RUNNING_PER_USER - 1)
             if excess > 0:
-                mine.sort(key=lambda x: (last_active.get(x.labels["replot.repl"], float("-inf")), _created_ts(x)))
-                victims = [x.labels["replot.repl"] for x in mine[:excess]]
+                mine.sort(key=lambda x: (last_active.get(x.labels["repl.id"], float("-inf")), _created_ts(x)))
+                victims = [x.labels["repl.id"] for x in mine[:excess]]
         if settings.MAX_RUNNING_REPLS > 0 and len(others) - len(victims) >= settings.MAX_RUNNING_REPLS:
             raise HTTPException(
                 status_code=503,
@@ -440,7 +440,7 @@ async def ports(repl_id: str) -> dict:
 def _running_info() -> list[dict]:
     out = []
     for c in _running():
-        rid = c.labels.get("replot.repl")
+        rid = c.labels.get("repl.id")
         if rid:
             out.append({"id": rid, "created": _created_ts(c)})
     return out
@@ -453,9 +453,9 @@ def _over_quota() -> list[tuple[str, int, int]]:
     if settings.REPL_DISK_QUOTA_MB <= 0:
         return []
     over = []
-    listed = docker_client().api.containers(filters={"label": "replot.repl", "status": "running"}, size=True)
+    listed = docker_client().api.containers(filters={"label": "repl.id", "status": "running"}, size=True)
     for c in listed:
-        rid = (c.get("Labels") or {}).get("replot.repl")
+        rid = (c.get("Labels") or {}).get("repl.id")
         if not rid:
             continue
         rw = int(c.get("SizeRw") or 0)

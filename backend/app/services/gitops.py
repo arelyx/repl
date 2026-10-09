@@ -30,7 +30,7 @@ GIT_TIMEOUT = 60
 
 _GIT_ENV = {
     "PATH": "/usr/local/bin:/usr/bin:/bin",
-    "HOME": "/tmp/replot-git-home",
+    "HOME": "/tmp/repl-git-home",
     "GIT_CONFIG_NOSYSTEM": "1",
     "GIT_CONFIG_GLOBAL": "/dev/null",
     "GIT_TERMINAL_PROMPT": "0",
@@ -108,7 +108,7 @@ class _Sandbox:
             security_opt=["no-new-privileges"],
             oom_score_adj=800,
             log_config=LogConfig(type="json-file", config={"max-size": "1m", "max-file": "1"}),
-            labels={"replot.git": self.repl_id},
+            labels={"repl.git": self.repl_id},
             environment={"REPL_ID": self.repl_id},
         )
         if settings.REPL_RUNTIME:
@@ -164,7 +164,7 @@ class _Sandbox:
         if author:
             cmd += ["-c", f"user.name={author[0]}", "-c", f"user.email={author[1]}"]
         else:
-            cmd += ["-c", "user.name=Replot", "-c", "user.email=replot@localhost"]
+            cmd += ["-c", "user.name=Repl", "-c", "user.email=repl@localhost"]
         cmd += list(args)
         code, out, err = self.exec(cmd, env_extra)
         if check and code != 0:
@@ -271,7 +271,7 @@ def diff(repo: str, sha: str | None) -> str:
     # never touch the real index: build a throwaway one from HEAD, mark
     # untracked files intent-to-add in it, and diff against that.
     with _Sandbox(repo) as g:
-        index = f"/tmp/replot-diff-{secrets.token_hex(8)}.index"
+        index = f"/tmp/repl-diff-{secrets.token_hex(8)}.index"
         env = {"GIT_INDEX_FILE": index}
         try:
             g.git("read-tree", "HEAD", check=False, env_extra=env)
@@ -316,7 +316,7 @@ def remove_stale_sandboxes(max_age_seconds: int = 600) -> None:
 
     api = _docker().api
     now = time.time()
-    for c in api.containers(all=True, filters={"label": "replot.git"}):
+    for c in api.containers(all=True, filters={"label": "repl.git"}):
         if now - int(c.get("Created", now)) > max_age_seconds:
             try:
                 api.remove_container(c["Id"], force=True)

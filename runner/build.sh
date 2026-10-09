@@ -8,8 +8,8 @@
 #      (Kotlin then indexes on first open inside the 2 GB repl container).
 set -euo pipefail
 cd "$(dirname "$0")"
-TAG=${1:-replit-polyglot:latest}
-STAGE=replit-polyglot:stage
+TAG=${1:-repl-polyglot:latest}
+STAGE=repl-polyglot:stage
 
 docker build -t "$STAGE" .
 
@@ -24,4 +24,4 @@ else
   echo "build.sh: Kotlin index warm-up failed; building without a pre-built index" >&2
   docker tag "$STAGE" "$TAG"
 fi
-docker run --rm --entrypoint replot-versions "$TAG" >/dev/null && echo "build.sh: $TAG ready"
+docker run --rm --entrypoint repl-versions "$TAG" >/dev/null && echo "build.sh: $TAG ready"

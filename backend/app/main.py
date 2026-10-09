@@ -16,7 +16,7 @@ from app.routers import auth, files, internal, repls
 from app.services import runtime
 
 logging.basicConfig(level=logging.INFO)
-log = logging.getLogger("replot")
+log = logging.getLogger("repl")
 
 _problems = settings.secret_problems()
 if _problems:
@@ -60,7 +60,7 @@ async def lifespan(app: FastAPI):
 
 _dev = settings.is_development
 app = FastAPI(
-    title="Replot API",
+    title="Repl API",
     lifespan=lifespan,
     docs_url="/api/v1/docs" if _dev else None,
     redoc_url=None,

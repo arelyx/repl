@@ -419,7 +419,7 @@ export class LspClient {
     const root = this.opts.rootUri;
     return {
       processId: null,
-      clientInfo: { name: "Replot", version: "1.0" },
+      clientInfo: { name: "Repl", version: "1.0" },
       locale: "en",
       rootPath: decodeURIComponent(root.replace(/^file:\/\//, "")),
       rootUri: root,

@@ -48,3 +48,12 @@ class ReplCollaborator(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     user: Mapped[User] = relationship(lazy="joined")
+
+
+class PreviewCert(Base):
+    """A preview hostname the TLS proxy was allowed to get a certificate for
+    (routers/internal.py tls_ask); counted against PREVIEW_CERTS_PER_WEEK."""
+    __tablename__ = "preview_certs"
+
+    domain: Mapped[str] = mapped_column(String(255), primary_key=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

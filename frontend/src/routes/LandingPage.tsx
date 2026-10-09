@@ -39,7 +39,7 @@ export function LandingPage() {
           Get a Linux box.
         </h1>
         <p className="mt-4 max-w-[34rem] text-base text-muted-foreground">
-          Replot runs your code in a real container from a browser tab. Every repl comes with a console, a bash
+          Repl runs your code in a real container from a browser tab. Every repl comes with a console, a bash
           shell, a web preview, a GUI display, git and live multiplayer.
         </p>
 
@@ -95,7 +95,7 @@ export function LandingPage() {
       </main>
 
       <footer className="flex h-6 shrink-0 items-center gap-4 border-t bg-card px-3 text-xs text-muted-foreground">
-        <span>Self-hosted Replot</span>
+        <span>Self-hosted Repl</span>
         {templates && <span className="tabular ml-auto">{templates.length} templates</span>}
       </footer>
     </div>

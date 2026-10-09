@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Replot in-container agent.
+"""Repl in-container agent.
 
 Listens on 0.0.0.0:8008 and exposes:
   GET /health  -> {"ok": true, "clients": N, "editors": E, "viewers": V}
@@ -9,7 +9,7 @@ Listens on 0.0.0.0:8008 and exposes:
   WS  /lsp/{server} -> a language server over JSON-RPC (see lsp_bridge.py)
   GET/WS /vnc/{path} -> noVNC + websockify (listening on 127.0.0.1:6080 only)
 
-Every request must carry `X-Agent-Token: $REPLOT_AGENT_TOKEN`. The backend
+Every request must carry `X-Agent-Token: $REPL_AGENT_TOKEN`. The backend
 derives the token per repl and hands it to this container and to nginx (via
 the auth subrequest), so nothing else that can reach :8008 gets in.
 
@@ -71,7 +71,7 @@ FALLBACKS = [
 
 # Taken out of the environment before any child starts, so user programs (and
 # viewers watching their output) never see it.
-AGENT_TOKEN = os.environ.pop("REPLOT_AGENT_TOKEN", "")
+AGENT_TOKEN = os.environ.pop("REPL_AGENT_TOKEN", "")
 VNC_UPSTREAM = "127.0.0.1:6080"
 
 total_clients = 0
@@ -145,7 +145,7 @@ def child_env(port=None):
         "USER": "runner",
         "HOST": "0.0.0.0",
         "PORT": str(port or DEFAULT_PORT),
-        "REPLOT": "1",
+        "REPL": "1",
         "PYTHONUNBUFFERED": "1",
         "SDL_AUDIODRIVER": env.get("SDL_AUDIODRIVER", "dummy"),  # no sound card
     })

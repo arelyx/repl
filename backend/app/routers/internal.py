@@ -1,12 +1,15 @@
 import hmac
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response
+from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
 
 from app.config import settings
 from app.database import get_db
-from app.models import Repl, User
+from app.models import PreviewCert, Repl, User
 from app.schemas import InternalFileWrite
 from app.security import get_optional_user
 from app.services import fsops, runtime
@@ -97,3 +100,47 @@ async def internal_put(
         raise HTTPException(status_code=404, detail="Repl not found")
     size = await run_in_threadpool(fsops.write_file, body.repl_id, body.path, body.content.encode("utf-8"))
     return {"path": body.path, "size": size}
+
+
+_PREVIEW_PORT_DENY = {8008, 6080, 5900}
+
+
+@router.get("/tls-ask")
+async def tls_ask(domain: str = Query(""), db: AsyncSession = Depends(get_db)):
+    """Caddy's on-demand TLS `ask` hook (deploy/Caddyfile.example): 200 only
+    for `{id}-{port}.preview.<PREVIEW_HOST>` of a repl that exists and a port
+    nginx would proxy, so nobody can make the host request certificates for
+    arbitrary names. nginx serves this at /tls-ask to host-local callers only.
+
+    Each new hostname is one certificate from the CA, and Let's Encrypt allows
+    50 new certificates per registered domain per week, shared with every
+    other site on that domain. New hostnames beyond PREVIEW_CERTS_PER_WEEK are
+    refused (that preview fails TLS until the window moves on); hostnames
+    already approved stay approved, so renewals are never blocked.
+    """
+    suffix = ".preview." + (settings.PREVIEW_HOST.strip() or settings.PUBLIC_HOST).split(":")[0].lower()
+    domain = domain.strip().lower()
+    if not domain.endswith(suffix):
+        return Response(status_code=404)
+    label = domain[: -len(suffix)]
+    rid, _, port = label.rpartition("-")
+    if not rid.isalnum() or not port.isdigit() or port.startswith("0"):
+        return Response(status_code=404)
+    if not 1 <= int(port) <= 65535 or int(port) in _PREVIEW_PORT_DENY:
+        return Response(status_code=404)
+    if await db.get(Repl, rid) is None:
+        return Response(status_code=404)
+    if await db.get(PreviewCert, domain) is not None:
+        return Response(status_code=200)
+    if settings.PREVIEW_CERTS_PER_WEEK >= 0:
+        since = datetime.now(timezone.utc) - timedelta(days=7)
+        recent = await db.scalar(
+            select(func.count()).select_from(PreviewCert).where(PreviewCert.created_at > since))
+        if recent >= settings.PREVIEW_CERTS_PER_WEEK:
+            return Response(status_code=429)
+    db.add(PreviewCert(domain=domain))
+    try:
+        await db.commit()
+    except IntegrityError:  # a concurrent ask for the same hostname won
+        await db.rollback()
+    return Response(status_code=200)

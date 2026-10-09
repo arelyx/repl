@@ -8,6 +8,7 @@ reports listening ports. Needs `aiohttp`.
 """
 import asyncio
 import json
+import re
 import secrets
 import sys
 
@@ -37,6 +38,9 @@ async def run_template(s: aiohttp.ClientSession, slug: str) -> bool:
                     m = json.loads(msg.data)
                     if m["type"] == "output":
                         out.append(m["data"])
+                        # Several templates ask for a name first.
+                        if re.sub(r"\x1b\[[0-9;?]*[A-Za-z]", "", m["data"]).rstrip().endswith("?"):
+                            await ws.send_str(json.dumps({"type": "input", "data": "smoke\r"}))
                     elif m["type"] == "status" and not m["running"] and m.get("exitCode") is not None:
                         ok = m["exitCode"] == 0
                         break

@@ -1,6 +1,6 @@
 # Design direction 08: dense-pro
 
-A keyboard-first IDE skin for Replot. It treats the browser tab like a desktop IDE: compact chrome, a
+A keyboard-first IDE skin for Repl. It treats the browser tab like a desktop IDE: compact chrome, a
 command palette as the main way around, an activity bar, breadcrumbs, and a status bar that tells you
 everything about the box you are coding in.
 
@@ -8,7 +8,7 @@ everything about the box you are coding in.
 
 - Subject: a real Linux container you drive from a browser tab.
 - Audience for this direction: working developers and serious students who already live in VS Code,
-  JetBrains or Zed and want Replot to feel like home in the first five seconds.
+  JetBrains or Zed and want Repl to feel like home in the first five seconds.
 - Primary job: open a repl and stay in flow for an hour without touching the mouse.
 
 ## Token plan, first draft
@@ -98,7 +98,7 @@ Workspace, desktop:
 │▤ │ Files     │ main.py ×  utils.py ×            │ Console Shell Web Display│
 │⎇ │ ▸ src     │ repl › src › main.py             │                          │
 │  │   main.py │                                  │  xterm (Red Hat Mono)    │
-│  │           │  Monaco, theme replot-graphite   │                          │
+│  │           │  Monaco, theme repl-graphite   │                          │
 │⌘ │           │                                  │                          │
 ├──┴───────────┴──────────────────────────────────┴──────────────────────────┤
 │ Python ▌ ● Running  ⎇ main  Pyright ready   ⊗ 0  ⚠ 1   Ln 12, Col 4   Ctrl K │ 24px status bar, language-colored
@@ -127,7 +127,7 @@ a named repl), then a dense table. Left aligned throughout.
 
 ```
 ┌──────────────────────────────────────────────────────────┐
-│ ▣ Replot  My repls  Explore   [ Search … Ctrl K ]    ◯   │
+│ ▣ Repl  My repls  Explore   [ Search … Ctrl K ]    ◯   │
 ├──────────────────────────────────────────────────────────┤
 │ My repls                                   [New repl  N] │
 │ Start from  [Py Python] [Nd Node] [Fl Flask] … All       │
@@ -143,11 +143,11 @@ a named repl), then a dense table. Left aligned throughout.
 Landing: left aligned, one column, no feature cards.
 
 ```
- ▣ Replot                                    Explore  Log in  [Sign up]
+ ▣ Repl                                    Explore  Log in  [Sign up]
 
  Type a language.
  Get a Linux box.
- Replot runs your code in a real container, in a browser tab.
+ Repl runs your code in a real container, in a browser tab.
 
  ┌ ⌕ python ─────────────────────────────── Ctrl K ┐
  │ Py  Python          Python 3 with pip         ↵ │

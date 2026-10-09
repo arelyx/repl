@@ -64,14 +64,14 @@ function ReplLoader({ id }: { id: string }) {
       .then((r) => {
         if (cancelled) return;
         useWorkspace.getState().reset(r);
-        document.title = `${r.name} - Replot`;
+        document.title = `${r.name} - Repl`;
       })
       .catch((e) => {
         if (!cancelled) setError({ status: e instanceof ApiError ? e.status : 0, message: errorMessage(e) });
       });
     return () => {
       cancelled = true;
-      document.title = "Replot";
+      document.title = "Repl";
       // Leaving the workspace: the palette should stop offering this repl's files and commands.
       useWorkspace.setState({ repl: null, files: [], openTabs: [], activePath: null });
     };

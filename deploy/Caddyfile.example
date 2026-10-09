@@ -1,0 +1,24 @@
+# Host Caddy in front of Repl (docs/DEPLOY.md). Replace repl.example.com and
+# 8390 (HTTP_PORT in .env). The global options block must be the first block
+# in /etc/caddy/Caddyfile; merge it into an existing one if there is one.
+
+{
+	on_demand_tls {
+		# 200 only for <id>-<port>.preview.<PREVIEW_HOST> of an existing repl,
+		# within PREVIEW_CERTS_PER_WEEK new hostnames (backend: tls_ask).
+		ask http://127.0.0.1:8390/tls-ask
+	}
+}
+
+repl.example.com {
+	reverse_proxy 127.0.0.1:8390
+}
+
+# Web previews: one certificate per hostname, issued on first visit.
+# Needs a DNS record for *.preview.repl.example.com.
+*.preview.repl.example.com {
+	tls {
+		on_demand
+	}
+	reverse_proxy 127.0.0.1:8390
+}

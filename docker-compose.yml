@@ -1,7 +1,7 @@
-# Replot: docker compose up -d --build
-# Requires the runner image first: docker build -t replit-polyglot:latest runner/
+# Repl: docker compose up -d --build
+# Requires the runner image first: docker build -t repl-polyglot:latest runner/
 
-name: replot
+name: repl
 
 x-logging: &logging
   driver: json-file
@@ -14,7 +14,7 @@ services:
     build:
       context: .
       dockerfile: nginx/Dockerfile
-    container_name: replot-nginx
+    container_name: repl-nginx
     restart: unless-stopped
     ports:
       - "127.0.0.1:${HTTP_PORT:-8380}:80"
@@ -25,7 +25,7 @@ services:
 
   backend:
     build: ./backend
-    container_name: replot-backend
+    container_name: repl-backend
     restart: unless-stopped
     environment:
       - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
@@ -33,7 +33,7 @@ services:
       - INTERNAL_SECRET=${INTERNAL_SECRET}
       - REPLS_DIR=${REPLS_HOST_DIR}
       - REPLS_HOST_DIR=${REPLS_HOST_DIR}
-      - RUNNER_IMAGE=${RUNNER_IMAGE:-replit-polyglot:latest}
+      - RUNNER_IMAGE=${RUNNER_IMAGE:-repl-polyglot:latest}
       - REPL_NETWORK=rc-repls
       - PUBLIC_HOST=${PUBLIC_HOST:-localhost:8380}
       - IDLE_TIMEOUT_MINUTES=${IDLE_TIMEOUT_MINUTES:-30}
@@ -45,7 +45,7 @@ services:
       - JWT_EXPIRE_DAYS=${JWT_EXPIRE_DAYS:-7}
       - CORS_ORIGINS=${CORS_ORIGINS:-}
       - ALLOW_SIGNUP=${ALLOW_SIGNUP:-true}
-      - TRUSTED_PROXIES=${TRUSTED_PROXIES:-replot-nginx}
+      - TRUSTED_PROXIES=${TRUSTED_PROXIES:-repl-nginx}
       - AUTH_RATE_PER_MIN=${AUTH_RATE_PER_MIN:-10}
       - REGISTER_RATE_PER_HOUR=${REGISTER_RATE_PER_HOUR:-5}
       - LOGIN_MAX_FAILURES=${LOGIN_MAX_FAILURES:-5}
@@ -55,13 +55,14 @@ services:
       - MAX_UPLOAD_MB=${MAX_UPLOAD_MB:-50}
       - MAX_ZIP_MB=${MAX_ZIP_MB:-500}
       - MAX_GIT_OUTPUT_MB=${MAX_GIT_OUTPUT_MB:-2}
+      - PREVIEW_CERTS_PER_WEEK=${PREVIEW_CERTS_PER_WEEK:-30}
       # Repl runtime limits
       - REPL_RUNTIME=${REPL_RUNTIME-runsc}
       - ALLOW_INSECURE_RUNTIME=${ALLOW_INSECURE_RUNTIME:-false}
       - REPL_CPUS=${REPL_CPUS:-1}
       - REPL_MEMORY=${REPL_MEMORY:-2g}
       - REPL_PIDS=${REPL_PIDS:-2048}
-      - REPL_CGROUP_PARENT=${REPL_CGROUP_PARENT-replot-repls.slice}
+      - REPL_CGROUP_PARENT=${REPL_CGROUP_PARENT-repl-containers.slice}
       - MAX_RUNNING_PER_USER=${MAX_RUNNING_PER_USER:-2}
       - MAX_RUNNING_REPLS=${MAX_RUNNING_REPLS:-20}
       - REPL_DISK_QUOTA_MB=${REPL_DISK_QUOTA_MB:-2048}
@@ -82,7 +83,7 @@ services:
 
   collaboration:
     build: ./collaboration
-    container_name: replot-collaboration
+    container_name: repl-collaboration
     restart: unless-stopped
     environment:
       - BACKEND_URL=http://backend:8000
@@ -93,7 +94,7 @@ services:
 
   postgres:
     image: postgres:18.2-alpine
-    container_name: replot-postgres
+    container_name: repl-postgres
     restart: unless-stopped
     environment:
       - POSTGRES_USER=${POSTGRES_USER}

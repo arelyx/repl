@@ -1,10 +1,10 @@
 .PHONY: runner versions update-versions up down logs smoke
 
 runner:            ## Build the polyglot repl image (slow the first time)
-	runner/build.sh replit-polyglot:latest
+	runner/build.sh repl-polyglot:latest
 
 versions:          ## Print every toolchain version in the runner image
-	docker run --rm --entrypoint replot-versions replit-polyglot:latest
+	docker run --rm --entrypoint repl-versions repl-polyglot:latest
 
 update-versions:   ## Bump runner/Dockerfile pins to the latest stable releases
 	python3 runner/update-versions.py
@@ -14,7 +14,7 @@ up: runner         ## Build and start the stack on http://localhost:8380
 	docker compose up -d --build
 
 down:              ## Stop the stack and all repl containers
-	-docker ps -aq --filter label=replot.repl | xargs -r docker rm -f
+	-docker ps -aq --filter label=repl.id | xargs -r docker rm -f
 	docker compose down
 
 logs:

@@ -303,7 +303,7 @@ def zip_repl(repl_id: str) -> str:
     """
     limit = settings.MAX_ZIP_MB * 1024 * 1024
     root = str(repl_root(repl_id))
-    fd_out, out_path = tempfile.mkstemp(prefix="replot-zip-", suffix=".zip")
+    fd_out, out_path = tempfile.mkstemp(prefix="repl-zip-", suffix=".zip")
     total = 0
     try:
         with os.fdopen(fd_out, "wb") as raw, zipfile.ZipFile(raw, "w", zipfile.ZIP_DEFLATED) as zf:

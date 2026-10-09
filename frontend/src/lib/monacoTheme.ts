@@ -1,6 +1,6 @@
 import type * as Monaco from "monaco-editor";
 
-export const MONACO_THEME = "replot-graphite";
+export const MONACO_THEME = "repl-graphite";
 export const CODE_FONT = '"Red Hat Mono Variable", ui-monospace, "SFMono-Regular", Menlo, monospace';
 
 let defined = false;

@@ -44,8 +44,8 @@ async def main() -> int:
     ap.add_argument("--expect-completion")
     ap.add_argument("--timeout", type=float, default=120)
     ap.add_argument("--url", default="ws://localhost:8008/lsp/")
-    # `docker exec` sessions inherit the container's REPLOT_AGENT_TOKEN.
-    ap.add_argument("--token", default=os.environ.get("REPLOT_AGENT_TOKEN", ""))
+    # `docker exec` sessions inherit the container's REPL_AGENT_TOKEN.
+    ap.add_argument("--token", default=os.environ.get("REPL_AGENT_TOKEN", ""))
     a = ap.parse_args()
 
     path = os.path.join(ROOT, a.file)
