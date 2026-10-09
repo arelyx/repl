@@ -1,0 +1,6 @@
+{
+  "nasm": {
+    "command": ["python3", "/opt/replagent/compiler_ls.py", "nasm", "--check", "--filter-completion", "--", "asm-lsp"],
+    "env": {"XDG_CONFIG_HOME": "/opt/lsp/asm-lsp"}
+  }
+}

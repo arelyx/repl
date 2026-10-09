@@ -1,0 +1,11 @@
+{
+  "pascal": {
+    "command": ["python3", "/opt/replagent/compiler_ls.py", "pascal"]
+  },
+  "scheme": {
+    "command": ["python3", "/opt/replagent/compiler_ls.py", "scheme"]
+  },
+  "commonlisp": {
+    "command": ["python3", "/opt/replagent/compiler_ls.py", "commonlisp"]
+  }
+}

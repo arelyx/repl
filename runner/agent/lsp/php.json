@@ -1,0 +1,17 @@
+{
+  "php": {
+    "command": ["python3", "/opt/replagent/compiler_ls.py", "php", "--hold-until", "indexingEnded", "--", "intelephense", "--stdio"],
+    "initializationOptions": {
+      "storagePath": "/tmp/intelephense",
+      "globalStoragePath": "/tmp/intelephense/global"
+    },
+    "settings": {
+      "intelephense": {
+        "environment": {"phpVersion": "8.5.11"},
+        "telemetry": {"enabled": false},
+        "files": {"maxSize": 5000000, "exclude": ["**/.git/**", "**/node_modules/**"]},
+        "diagnostics": {"enable": true, "run": "onType"}
+      }
+    }
+  }
+}

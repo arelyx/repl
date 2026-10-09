@@ -1,0 +1,14 @@
+{
+  "lua": {
+    "command": ["lua-language-server"],
+    "settings": {
+      "Lua": {
+        "runtime": {"version": "Lua 5.5"},
+        "telemetry": {"enable": false},
+        "workspace": {"checkThirdParty": false},
+        "diagnostics": {"enable": true},
+        "hint": {"enable": true}
+      }
+    }
+  }
+}

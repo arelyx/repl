@@ -1,0 +1,12 @@
+{
+  "haskell": {
+    "command": ["haskell-language-server-wrapper", "--lsp"],
+    "settings": {
+      "haskell": {
+        "formattingProvider": "none",
+        "checkProject": false,
+        "maxCompletions": 40
+      }
+    }
+  }
+}

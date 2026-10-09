@@ -1,0 +1,14 @@
+{
+  "perl": {
+    "command": ["python3", "/opt/replagent/compiler_ls.py", "perl", "--builtins", "--", "perlnavigator", "--stdio"],
+    "settings": {
+      "perlnavigator": {
+        "perlPath": "/opt/perl/bin/perl",
+        "enableWarnings": true,
+        "perlcriticEnabled": false,
+        "perltidyEnabled": false,
+        "includeLib": true
+      }
+    }
+  }
+}
