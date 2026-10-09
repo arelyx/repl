@@ -49,8 +49,14 @@ user JavaScript never runs on the app's origin.
 ```sh
 git clone https://github.com/arelyx/repl.git ~/repl && cd ~/repl
 cp .env.example .env    # then edit, see below
-docker load < repl-polyglot.tar.zst   # or: make runner (about an hour on 8 cores)
 docker compose up -d --build
+```
+
+The runner image (12.6 GB) is built on a workstation and streamed over, which
+keeps an hour of compiling off the shared host:
+
+```sh
+make runner && docker save repl-polyglot:latest | zstd -T0 -6 | ssh cloud 'zstd -d | docker load'
 ```
 
 `.env` for this deployment (secrets: `openssl rand -hex 32` each):
