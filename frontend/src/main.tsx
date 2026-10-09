@@ -6,11 +6,14 @@ import EditorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
 import "@xterm/xterm/css/xterm.css";
 import "./styles/index.css";
 import App from "./App.tsx";
+import { setupMonacoLanguages } from "@/lib/lsp";
 
 // Use the locally bundled monaco-editor instead of loading from a CDN.
 // Only the base editor worker: language services run without dedicated workers.
 self.MonacoEnvironment = { getWorker: () => new EditorWorker() };
 loader.config({ monaco });
+// Extra Monarch grammars + language-server hooks (go-to-definition across files, markers).
+setupMonacoLanguages();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
