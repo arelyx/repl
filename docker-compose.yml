@@ -57,6 +57,7 @@ services:
       - MAX_GIT_OUTPUT_MB=${MAX_GIT_OUTPUT_MB:-2}
       # Repl runtime limits
       - REPL_RUNTIME=${REPL_RUNTIME-runsc}
+      - ALLOW_INSECURE_RUNTIME=${ALLOW_INSECURE_RUNTIME:-false}
       - REPL_CPUS=${REPL_CPUS:-1}
       - REPL_MEMORY=${REPL_MEMORY:-2g}
       - REPL_PIDS=${REPL_PIDS:-2048}

@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     IDLE_TIMEOUT_MINUTES: int = 30
     # gVisor: user code never talks to the host kernel directly. Empty = runc.
     REPL_RUNTIME: str = "runsc"
+    ALLOW_INSECURE_RUNTIME: bool = False
     COLLAB_COMMAND_URL: str = "http://collaboration:1235"
     # Containers attached to every per-repl network (they proxy to / poll repls).
     GATEWAY_CONTAINERS: str = "replot-nginx,replot-backend"
@@ -109,6 +110,13 @@ class Settings(BaseSettings):
                 password = ""
             if password.strip().lower() in _KNOWN_DEFAULT_SECRETS or password.startswith("change-me"):
                 problems.append("the database password (POSTGRES_PASSWORD / DATABASE_URL) is missing or a known default")
+        if (not self.is_development and self.REPL_RUNTIME.strip() != "runsc"
+                and not self.ALLOW_INSECURE_RUNTIME):
+            # Under runc user code talks to the host kernel directly: AF_ALG,
+            # NETLINK_XFRM etc. stay reachable, the surface of recent LPEs
+            # (Copy Fail, Dirty Frag). gVisor answers those itself.
+            problems.append("REPL_RUNTIME must be runsc (gVisor) in production; "
+                            "set ALLOW_INSECURE_RUNTIME=true to run repls on runc anyway")
         if self.PUBLIC_SCHEME.strip().lower() not in ("http", "https"):
             problems.append("PUBLIC_SCHEME must be http or https")
         return problems
