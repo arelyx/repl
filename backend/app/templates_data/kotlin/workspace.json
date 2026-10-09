@@ -1,0 +1,28 @@
+{
+  "modules": [
+    {
+      "name": "main",
+      "dependencies": [
+        {"type": "inheritedSdk"},
+        {"type": "moduleSource"},
+        {"type": "library", "name": "kotlin-stdlib", "scope": "compile"}
+      ],
+      "contentRoots": [
+        {"path": ".", "sourceRoots": [{"path": ".", "type": "java-source"}]}
+      ]
+    }
+  ],
+  "libraries": [
+    {
+      "name": "kotlin-stdlib",
+      "type": null,
+      "roots": [
+        {"path": "/opt/kotlinc/lib/kotlin-stdlib.jar"},
+        {"path": "/opt/kotlinc/lib/kotlin-stdlib-sources.jar", "type": "SOURCES"}
+      ]
+    }
+  ],
+  "sdks": [
+    {"name": "JDK", "type": "JavaSDK", "version": "27", "homePath": "/opt/java", "additionalData": ""}
+  ]
+}

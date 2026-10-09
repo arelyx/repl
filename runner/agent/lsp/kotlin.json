@@ -1,0 +1,8 @@
+{
+  "kotlin": {
+    "command": ["kotlin-lsp"],
+    "initializationOptions": {
+      "indexDir": "/home/runner/.cache/kotlin-lsp"
+    }
+  }
+}
