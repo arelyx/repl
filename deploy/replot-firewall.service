@@ -1,0 +1,13 @@
+[Unit]
+Description=Replot egress firewall for repl containers
+After=docker.service
+Requires=docker.service
+PartOf=docker.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/opt/replot/firewall.sh
+
+[Install]
+WantedBy=multi-user.target docker.service

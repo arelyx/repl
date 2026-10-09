@@ -1,0 +1,20 @@
+# Parent cgroup for every repl container (backend passes
+# cgroup_parent=replot-repls.slice). Whatever users run, repls as a whole
+# cannot take more than these limits, so nginx, the backend, postgres and the
+# OS keep their share. Sized by deploy/install-host.sh from the host's cores
+# and RAM; the numbers below are this host's (32 cores, 29 GB).
+[Unit]
+Description=Replot repl containers
+Before=slices.target
+
+[Slice]
+CPUAccounting=yes
+CPUQuota=2800%
+CPUWeight=100
+MemoryAccounting=yes
+MemoryMax=20G
+MemoryHigh=19G
+MemorySwapMax=0
+TasksMax=30000
+IOAccounting=yes
+IOWeight=50
