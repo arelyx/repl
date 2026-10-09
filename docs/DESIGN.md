@@ -218,13 +218,21 @@ WebSocket messages are JSON text frames:
 
 ## 6. HTTP API (`/api/v1`)
 
-Auth cookie: `access_token` (httpOnly, SameSite=Lax, JWT HS256, 7 days).
+Auth cookie: `access_token`, or `__Host-access_token` when cookies are Secure
+(`PUBLIC_SCHEME=https`). httpOnly, SameSite=Lax, JWT HS256 carrying the user's
+`token_version`, lifetime `JWT_EXPIRE_DAYS` (7). Logout and password changes bump
+`token_version`, which revokes every token the user holds.
 Errors: `{"detail": "..."}` with the usual status codes.
 
 **Auth**
-- `POST /auth/register {email, username, password, display_name?}` → `User` and sets the cookie
+- `POST /auth/register {email, username, password (>= 10 chars), display_name?}` → `User` and sets the cookie
+  (403 when `ALLOW_SIGNUP=false`; one generic 409 for a taken email or username)
 - `POST /auth/login {login, password}` (`login` = email or username) → `User` and sets the cookie
-- `POST /auth/logout` → 204
+- `POST /auth/logout` → 204 (revokes all of the user's sessions)
+- `POST /auth/password {current_password, new_password}` → `User`, re-issues this session's cookie, revokes the others
+
+Login and register are rate limited per client IP (`AUTH_RATE_PER_MIN`, `REGISTER_RATE_PER_HOUR`)
+and failed logins per account (`LOGIN_MAX_FAILURES` per `LOGIN_FAILURE_WINDOW_MIN`) → 429 with `Retry-After`.
 - `GET /auth/me` → `User` | 401
 
 `User = {id, email, username, display_name}`
@@ -241,6 +249,8 @@ Errors: `{"detail": "..."}` with the usual status codes.
 - `PATCH /repls/{id} {name?, description?, is_public?}` → `Repl` (owner)
 - `DELETE /repls/{id}` → 204 (owner; removes container + files)
 - `POST /repls/{id}/fork {name?}` → `Repl`
+
+Create and fork return 403 past `MAX_REPLS_PER_USER`; fork returns 413 when the source is larger than `REPL_DISK_QUOTA_MB`.
 
 `Repl = {id, name, description, template, language, is_public, owner: {id, username, display_name}, role: "owner"|"editor"|"viewer", forked_from, created_at, updated_at, config: {run, entrypoint, gui, port}}`
 
@@ -260,7 +270,11 @@ Errors: `{"detail": "..."}` with the usual status codes.
 - `POST /repls/{id}/files/rename {from, to}` (editor+)
 - `DELETE /repls/{id}/files?path=` (editor+)
 - `POST /repls/{id}/files/upload` multipart `file`, `dir` (editor+)
-- `GET /repls/{id}/download` → zip
+- `GET /repls/{id}/download` → zip, built in a temp file and streamed (413 past `MAX_ZIP_MB` uncompressed)
+
+File reads return 413 past `MAX_FILE_READ_MB`; uploads return 413 past `MAX_UPLOAD_MB` or when the repl
+would exceed `REPL_DISK_QUOTA_MB`. Diff and show output is truncated past `MAX_GIT_OUTPUT_MB`. Commits are
+authored as `<username>@users.noreply.replot`.
 
 **Git**
 - `GET /repls/{id}/git/status` → `{branch, changes: [{path, status}]}`
@@ -271,7 +285,7 @@ Errors: `{"detail": "..."}` with the usual status codes.
 - `POST /repls/{id}/git/restore {sha, path?}` → check out the tree (or one path) from `sha`, then commit "Restore to {short}" (editor+)
 
 **Sharing**
-- `GET /repls/{id}/collaborators` → `[{user: User, role}]`
+- `GET /repls/{id}/collaborators` → `[{user: {id, username, display_name}, role}]` (no emails)
 - `POST /repls/{id}/collaborators {username, role}` (owner)
 - `DELETE /repls/{id}/collaborators/{user_id}` (owner)
 
@@ -418,6 +432,13 @@ runaway is intermittent and its trigger is unknown. The defenses are layered:
 - Previews are served on a different origin (`*.preview.localhost`), so user
   JavaScript cannot read the auth cookie (it is httpOnly anyway). See the
   Origin check above for requests that carry the cookie.
+
+- Startup refuses placeholder or short (< 32 chars) `JWT_SECRET_KEY` /
+  `INTERNAL_SECRET`, and in production a placeholder database password.
+- The API docs (`/api/v1/docs`, `openapi.json`) are served only with
+  `APP_ENV=development`. CORS is off unless `CORS_ORIGINS` is set.
+- Rate limits key on the client IP; `X-Forwarded-For` is believed only from
+  `TRUSTED_PROXIES` (default: the nginx container), read right to left.
 
 ## 10. Templates
 

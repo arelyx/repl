@@ -77,7 +77,7 @@ export interface GitCommit {
 }
 
 export interface Collaborator {
-  user: User;
+  user: Omit<User, "email">;
   role: "viewer" | "editor";
 }
 

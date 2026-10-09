@@ -3,10 +3,11 @@ import shutil
 import subprocess
 
 from fastapi import APIRouter, Depends, HTTPException, Response
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
 
+from app.config import settings
 from app.database import get_db
 from app.models import Repl, ReplCollaborator, User
 from app.schemas import ForkIn, ReplCreate, ReplUpdate
@@ -55,6 +56,21 @@ async def _unique_id(db: AsyncSession) -> str:
             return rid
 
 
+async def _check_repl_limit(db: AsyncSession, user: User) -> None:
+    count = await db.scalar(select(func.count()).select_from(Repl).where(Repl.owner_id == user.id))
+    if count >= settings.MAX_REPLS_PER_USER:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Repl limit reached ({settings.MAX_REPLS_PER_USER}). Delete a repl to create another.",
+        )
+
+
+def _collab_user(u: User) -> dict:
+    # No email: anyone can be added by username, so returning it (even to the
+    # owner) would let any user harvest addresses.
+    return {"id": u.id, "username": u.username, "display_name": u.display_name}
+
+
 def _create_from_template(slug: str, dest: str, message: str, author: tuple[str, str]) -> None:
     src = TEMPLATES_DIR / slug
     if src.is_dir():
@@ -69,6 +85,7 @@ async def create_repl(body: ReplCreate, user: User = Depends(get_current_user), 
     tmpl = get_template(body.template)
     if tmpl is None or "/" in body.template or body.template.startswith("."):
         raise HTTPException(status_code=400, detail="Unknown template")
+    await _check_repl_limit(db, user)
     rid = await _unique_id(db)
     dest = str(fsops.repl_root(rid))
     try:
@@ -154,6 +171,14 @@ async def fork_repl(
     src, _, user = ctx
     if user is None:
         raise HTTPException(status_code=401, detail="Not authenticated")
+    await _check_repl_limit(db, user)
+    quota = fsops.quota_bytes()
+    used = await run_in_threadpool(fsops.disk_usage, fsops.repl_root(src.id), quota)
+    if used > quota:
+        raise HTTPException(
+            status_code=413,
+            detail=f"This repl is larger than the {settings.REPL_DISK_QUOTA_MB} MB quota and can't be forked",
+        )
     rid = await _unique_id(db)
     try:
         await run_in_threadpool(_fork_copy, str(fsops.repl_root(src.id)), str(fsops.repl_root(rid)))
@@ -217,7 +242,7 @@ async def list_collaborators(ctx=Depends(require_role("viewer")), db: AsyncSessi
     )
     return [
         {
-            "user": {"id": c.user.id, "email": c.user.email, "username": c.user.username, "display_name": c.user.display_name},
+            "user": _collab_user(c.user),
             "role": c.role,
         }
         for c in res.scalars().all()
@@ -230,8 +255,6 @@ from app.schemas import CollaboratorIn  # noqa: E402
 @router.post("/repls/{repl_id}/collaborators")
 async def add_collaborator(body: CollaboratorIn, ctx=Depends(require_role("owner")), db: AsyncSession = Depends(get_db)):
     repl, _, _ = ctx
-    from sqlalchemy import func
-
     res = await db.execute(select(User).where(func.lower(User.username) == body.username.strip().lower()))
     target = res.scalars().first()
     if target is None:
@@ -245,7 +268,7 @@ async def add_collaborator(body: CollaboratorIn, ctx=Depends(require_role("owner
         db.add(ReplCollaborator(repl_id=repl.id, user_id=target.id, role=body.role))
     await db.commit()
     return {
-        "user": {"id": target.id, "email": target.email, "username": target.username, "display_name": target.display_name},
+        "user": _collab_user(target),
         "role": body.role,
     }
 

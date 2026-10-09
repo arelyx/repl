@@ -118,4 +118,5 @@ async def list_shared(db: AsyncSession, user: User) -> list[tuple[Repl, str]]:
 
 
 def author_of(user: User) -> tuple[str, str]:
-    return (user.display_name or user.username, user.email)
+    # Commit authors are visible to every viewer, so never the real email.
+    return (user.display_name or user.username, f"{user.username}@users.noreply.replot")
