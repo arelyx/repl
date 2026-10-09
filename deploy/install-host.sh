@@ -48,8 +48,9 @@ if ! docker info --format '{{json .Runtimes}}' | grep -q '"runsc"'; then
   warn=1
 fi
 if ! systemctl is-active --quiet systemd-oomd; then
-  echo "WARNING: systemd-oomd is not running (apt install systemd-oomd)." >&2
-  warn=1
+  # The slice's MemoryMax already confines repl OOMs to repls; oomd adds
+  # pressure-based kills on a dedicated host.
+  echo "note: systemd-oomd is not running (optional; apt install systemd-oomd)." >&2
 fi
 if [ "$(awk '/^SwapTotal:/ {print $2}' /proc/meminfo)" != 0 ]; then
   echo "note: host swap is on. Repls get none (MemorySwapMax=0, memswap = mem)," \
