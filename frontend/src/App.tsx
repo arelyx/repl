@@ -3,6 +3,7 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthGuard } from "@/components/AuthGuard";
+import { CommandPalette } from "@/components/CommandPalette";
 import { AppLayout } from "@/layouts/AppLayout";
 import { AuthLayout } from "@/layouts/AuthLayout";
 import { LandingPage } from "@/routes/LandingPage";
@@ -42,7 +43,8 @@ function App() {
           <Route path="/repl/:id" element={<ReplPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
-        <Toaster position="bottom-right" richColors />
+        <CommandPalette />
+        <Toaster position="bottom-right" offset={{ bottom: 36, right: 16 }} mobileOffset={{ bottom: 64 }} />
       </TooltipProvider>
     </BrowserRouter>
   );

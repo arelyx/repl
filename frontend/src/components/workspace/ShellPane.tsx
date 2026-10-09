@@ -63,11 +63,11 @@ export function ShellPane({ visible }: { visible: boolean }) {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex h-8 shrink-0 items-center gap-2 border-b px-2 text-xs text-muted-foreground">
+      <div className="flex h-7 shrink-0 items-center gap-2 border-b bg-card px-2 text-xs text-muted-foreground">
         <span
           className={
             "size-2 rounded-full " +
-            (state === "open" ? "bg-green-500" : state === "connecting" ? "bg-yellow-500" : "bg-red-500/70")
+            (state === "open" ? "bg-ok" : state === "connecting" ? "bg-warn" : "bg-fault")
           }
         />
         <span>

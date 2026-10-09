@@ -46,13 +46,13 @@ function statusLetter(status: string): string {
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  M: "text-yellow-400",
-  A: "text-green-400",
-  D: "text-red-400",
-  R: "text-sky-400",
-  "?": "text-green-400",
-  "??": "text-green-400",
-  U: "text-green-400",
+  M: "text-warn",
+  A: "text-ok",
+  D: "text-fault",
+  R: "text-caret",
+  "?": "text-ok",
+  "??": "text-ok",
+  U: "text-ok",
 };
 
 export function GitPanel({ active }: { active: boolean }) {
@@ -135,8 +135,8 @@ export function GitPanel({ active }: { active: boolean }) {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex h-9 shrink-0 items-center gap-1 border-b px-2">
-        <span className="mr-auto text-xs font-semibold tracking-wider text-muted-foreground uppercase">
+      <div className="flex h-8 shrink-0 items-center gap-1 px-2">
+        <span className="mr-auto text-xs font-semibold text-foreground">
           Version control
         </span>
         {status && (
@@ -153,10 +153,10 @@ export function GitPanel({ active }: { active: boolean }) {
         <div className="space-y-4 p-3">
           <section className="space-y-2">
             <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
-              <span>Changes ({changes.length})</span>
+              <span>Changes <span className="tabular">{changes.length}</span></span>
               {changes.length > 0 && (
                 <button className="text-primary hover:underline" onClick={() => void openCommit(null)}>
-                  view diff
+                  View diff
                 </button>
               )}
             </div>
@@ -242,7 +242,7 @@ export function GitPanel({ active }: { active: boolean }) {
             <DialogTitle className="truncate">{selected ? selected.message : "Uncommitted changes"}</DialogTitle>
             <DialogDescription>
               {selected
-                ? `${selected.short_sha} · ${selected.author_name} · ${new Date(selected.date).toLocaleString()}`
+                ? `${selected.short_sha} by ${selected.author_name}, ${new Date(selected.date).toLocaleString()}`
                 : "Working tree compared to the last commit."}
             </DialogDescription>
           </DialogHeader>
