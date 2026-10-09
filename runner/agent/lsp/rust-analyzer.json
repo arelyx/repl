@@ -1,0 +1,25 @@
+{
+  "rust-analyzer": {
+    "command": ["/opt/lsp/rust-analyzer/rust-analyzer"],
+    "initializationOptions": {
+      "checkOnSave": true,
+      "check": {"command": "check"},
+      "cargo": {"buildScripts": {"enable": true}},
+      "procMacro": {"enable": true},
+      "numThreads": 2,
+      "cachePriming": {"numThreads": 1},
+      "lru": {"capacity": 64}
+    },
+    "settings": {
+      "rust-analyzer": {
+        "checkOnSave": true,
+        "check": {"command": "check"},
+        "cargo": {"buildScripts": {"enable": true}},
+        "procMacro": {"enable": true},
+        "numThreads": 2,
+        "cachePriming": {"numThreads": 1},
+        "lru": {"capacity": 64}
+      }
+    }
+  }
+}
