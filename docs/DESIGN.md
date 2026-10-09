@@ -414,8 +414,12 @@ runaway is intermittent and its trigger is unknown. The defenses are layered:
    index is layered into the image only on success. Otherwise the image ships
    without it, and Kotlin indexes on first open.
 2. **Per-server memory limit in the bridge.** Each server's process group is
-   polled every 2 s. Past `maxMemoryMB` (default 1280; jdtls 1500, kotlin
-   1700) the group is killed and the user sees a message. The server is then
+   polled every 2 s for its *anonymous* memory (smaps `Anonymous:`). Plain
+   RSS would also count mmap'd jars and kotlin-lsp's index, which are
+   reclaimable page cache; under gVisor that put a healthy Kotlin server at
+   1.9 GB "RSS" (0.8 GB anonymous). Past `maxMemoryMB` (default 1024; jdtls
+   1200, kotlin 1300; normal peaks are 0.03–0.83 GB) the group is killed and
+   the user sees a message. The server is then
    refused with HTTP 503 for 5 minutes, and the editor stops reconnecting.
 3. **Repl containers are hard-capped:** 2 GB with no swap
    (`memswap_limit` = `mem_limit`). They also run with `oom_score_adj` 800, so
@@ -425,10 +429,11 @@ runaway is intermittent and its trigger is unknown. The defenses are layered:
 
 - User code runs in containers as uid 1000 with no capabilities,
   `no-new-privileges`, and memory, CPU, pid, `/tmp` and log limits (§5). The
-  image has no `sudo`. This is not a hard
-  sandbox: anyone who can break out of runc reaches a host with the Docker
-  socket mounted in the backend. Production should use gVisor (`--runtime=runsc`),
-  which is a single config switch (`REPL_RUNTIME`).
+  image has no `sudo`. Repls run under gVisor (`REPL_RUNTIME=runsc`, the
+  default), so user code talks to gVisor's user-space kernel, not the host's:
+  a runc escape would reach a host with the Docker socket mounted in the
+  backend. The backend refuses to start with `runc` when `APP_ENV=production`
+  unless `ALLOW_INSECURE_RUNTIME=true`.
 - Each repl has its own bridge network (§5). Repls can reach the internet (for
   `pip install` and `npm install`) but not each other, and not postgres, which
   sits on `rc-internal`.
