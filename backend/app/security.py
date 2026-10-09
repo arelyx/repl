@@ -14,7 +14,7 @@ PLAIN_COOKIE_NAME = "access_token"
 
 # Checked against when the login names no user, so a miss costs as much as a
 # wrong password (same bcrypt cost as hash_password).
-_DUMMY_HASH = bcrypt.hashpw(b"replot-dummy-password", bcrypt.gensalt()).decode()
+_DUMMY_HASH = bcrypt.hashpw(b"repl-dummy-password", bcrypt.gensalt()).decode()
 
 
 def hash_password(password: str) -> str:

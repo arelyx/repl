@@ -1,4 +1,4 @@
-# Replot
+# Repl
 
 A self-hosted clone of 2020-era Replit. Pick a language or framework, get a
 real Linux container, and write and run code from the browser. Each repl comes
@@ -52,7 +52,7 @@ open http://localhost:8380
 `make up` is equivalent to:
 
 ```bash
-docker build -t replit-polyglot:latest runner/
+docker build -t repl-polyglot:latest runner/
 mkdir -p "$REPLS_HOST_DIR"
 docker compose up -d --build
 ```

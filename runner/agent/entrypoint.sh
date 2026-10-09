@@ -1,5 +1,5 @@
 #!/bin/bash
-# Replot container entrypoint: virtual display + VNC bridge, then the agent.
+# Repl container entrypoint: virtual display + VNC bridge, then the agent.
 # Runs as user `runner` (uid 1000). X failures must never stop the agent.
 export DISPLAY=:0
 export HOME=/home/runner
@@ -7,8 +7,8 @@ cd /home/runner/app 2>/dev/null || cd /home/runner
 
 # Only the agent gets the token; everything else (including the X session
 # and anything the user launches from it) starts without it.
-agent_token="${REPLOT_AGENT_TOKEN:-}"
-unset REPLOT_AGENT_TOKEN
+agent_token="${REPL_AGENT_TOKEN:-}"
+unset REPL_AGENT_TOKEN
 
 rm -f /tmp/.X0-lock /tmp/.X11-unix/X0 2>/dev/null
 
@@ -24,4 +24,4 @@ rm -f /tmp/.X0-lock /tmp/.X11-unix/X0 2>/dev/null
   wait
 ) &
 
-REPLOT_AGENT_TOKEN="$agent_token" exec python3 /opt/replagent/agent.py
+REPL_AGENT_TOKEN="$agent_token" exec python3 /opt/replagent/agent.py

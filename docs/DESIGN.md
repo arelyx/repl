@@ -1,4 +1,4 @@
-# Replit Clone ("Replot") — Design Document
+# Replit Clone ("Repl") — Design Document
 
 A self-hosted clone of 2020-era Replit: sign up, pick a language or framework,
 get a real Linux container, and write/run code from the browser. Every repl
@@ -47,7 +47,7 @@ Browser ──HTTP/WS──▶│ nginx                                         
                     │  /ws/repls/{id}/* → auth_request → repl-{id}:8008 / :6080   │
                     │  {id}-{port}.preview.localhost → repl-{id}:{port}          │
                     └───────────────────────────────────────────────────────────┘
-backend ──docker.sock──▶ Docker Engine ──▶ repl-{id} containers (image replit-polyglot)
+backend ──docker.sock──▶ Docker Engine ──▶ repl-{id} containers (image repl-polyglot)
 backend ──▶ Postgres (users, repls, collaborators)
 backend ──▶ ${REPLS_DIR}/{id}  (bind-mounted git working tree; the source of truth for files)
 collaboration ──▶ backend /api/v1/internal/*  (auth, load/store file content)
@@ -59,7 +59,7 @@ collaboration ──▶ backend /api/v1/internal/*  (auth, load/store file conte
 | `backend` | FastAPI, SQLAlchemy async, docker SDK, git CLI | Auth, repl CRUD, file API, git API, container lifecycle, sharing, nginx auth hook, idle reaper. |
 | `collaboration` | Hocuspocus (Node) | Yjs rooms per open file (`{replId}::{path}`); loads from and stores to the file on disk via the backend. |
 | `postgres` | Postgres 18 | Users, repls, collaborators. |
-| `repl-{id}` | `replit-polyglot` image | One per running repl. Runs the in-container agent, Xvfb + fluxbox + x11vnc + websockify (noVNC), and user code. |
+| `repl-{id}` | `repl-polyglot` image | One per running repl. Runs the in-container agent, Xvfb + fluxbox + x11vnc + websockify (noVNC), and user code. |
 
 ### Why these choices
 
@@ -128,7 +128,7 @@ port = 8000                       # template hint: default web preview port
 
 ## 5. Container runtime
 
-- Image: `replit-polyglot:latest` (`runner/Dockerfile`).
+- Image: `repl-polyglot:latest` (`runner/Dockerfile`).
 
 ### Toolchains are current upstream releases
 
@@ -167,7 +167,7 @@ reproducible.
   asks each project's release feed, or endoflife.date, for the latest stable
   release and rewrites the pins. A weekly GitHub Actions workflow runs it and
   opens a PR when something moved.
-- **Checking a build:** the build ends by running `replot-versions`, which
+- **Checking a build:** the build ends by running `repl-versions`, which
   prints every toolchain's version and fails the build if any of them
   doesn't start. `make versions` runs the same check against a built image.
 - **Templates:** they follow the toolchains (Go `go 1.27`, `net10.0`, Rust
@@ -175,7 +175,7 @@ reproducible.
   Vite 8, Express 5). Version numbers are kept out of template descriptions
   so they can't go stale.
 
-- Container name `repl-{id}`, labels `replot.repl={id}`. Each repl gets its own
+- Container name `repl-{id}`, labels `repl.id={id}`. Each repl gets its own
   bridge network `rc-repl-{id}`, which only the repl, nginx, and the backend
   join. On a shared network every repl could reach every other repl's
   unauthenticated agent and noVNC. The backend reattaches nginx and itself
@@ -190,11 +190,11 @@ reproducible.
   against the memory limit), json-file logs rotated at
   `REPL_LOG_MAX_SIZE=5m` x `REPL_LOG_MAX_FILE=2`, `cap_drop=ALL` with nothing
   added back, `no-new-privileges`, `oom_score_adj=800`. Containers live under
-  the systemd slice `REPL_CGROUP_PARENT=replot-repls.slice`, so the whole
+  the systemd slice `REPL_CGROUP_PARENT=repl-containers.slice`, so the whole
   fleet can be capped in one place (`systemctl set-property
-  replot-repls.slice CPUQuota=... MemoryMax=...`); if Docker rejects the
+  repl-containers.slice CPUQuota=... MemoryMax=...`); if Docker rejects the
   slice (cgroupfs driver) repls start under Docker's default parent. Labels:
-  `replot.repl={id}`, `replot.user={id of the user who started it}`.
+  `repl.id={id}`, `repl.user={id of the user who started it}`.
 - Caps: a user may have `MAX_RUNNING_PER_USER=2` repls running; starting
   another stops their least recently active one(s), and the start response
   lists them (`{"status":"running","stopped":["..."]}`). Past
@@ -206,7 +206,7 @@ reproducible.
 - Entrypoint (`/opt/replagent/entrypoint.sh`) starts Xvfb `:0` (960x600),
   fluxbox, x11vnc (`-forever -shared -nopw`, localhost only), websockify on
   `127.0.0.1:6080` serving `/usr/share/novnc`, then the agent on `:8008`.
-  Only the agent receives `REPLOT_AGENT_TOKEN`, and it removes it from its
+  Only the agent receives `REPL_AGENT_TOKEN`, and it removes it from its
   own environment before starting anything.
 - Lifecycle: `POST /repls/{id}/start` creates the network and container, then
   waits until the agent's `/health` answers. Startup takes about 0.6 s, so
@@ -301,7 +301,7 @@ Create and fork return 403 past `MAX_REPLS_PER_USER`; fork returns 413 when the 
 
 File reads return 413 past `MAX_FILE_READ_MB`; uploads return 413 past `MAX_UPLOAD_MB` or when the repl
 would exceed `REPL_DISK_QUOTA_MB`. Diff and show output is truncated past `MAX_GIT_OUTPUT_MB`. Commits are
-authored as `<username>@users.noreply.replot`.
+authored as `<username>@users.noreply.repl`.
 
 **Git**
 - `GET /repls/{id}/git/status` → `{branch, changes: [{path, status}]}`
@@ -516,16 +516,18 @@ docker-compose.yml
 
 ```
 cp .env.example .env
-docker build -t replit-polyglot:latest runner/      # or: make runner
+docker build -t repl-polyglot:latest runner/      # or: make runner
 make versions                                      # print toolchain versions
 docker compose up -d --build
 open http://localhost:8380
 ```
 
+Production behind a host TLS proxy (Caddy, on-demand preview certificates,
+gVisor, a capped systemd slice, backups): [DEPLOY.md](DEPLOY.md).
+
 ## 13. Future work
 
-gVisor runtime; per-user quotas; packager UI (pip/npm search); LSP
-(PlottedPlant already runs an LSP container); GitHub import and push;
+Packager UI (pip/npm search); GitHub import and push;
 always-on repls; debugger (DAP) integration; multi-host scheduling with a
 container pool for instant start.
 

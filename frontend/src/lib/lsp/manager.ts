@@ -542,7 +542,7 @@ export function setActiveManager(m: LspManager | null) {
   activeManager = m;
   useLspStore.getState().setManager(m);
   // Handy for poking at the client from devtools / browser tests.
-  if (import.meta.env.DEV) (window as unknown as { __replotLsp?: LspManager | null }).__replotLsp = m;
+  if (import.meta.env.DEV) (window as unknown as { __replLsp?: LspManager | null }).__replLsp = m;
 }
 
 let wired = false;

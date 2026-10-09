@@ -32,7 +32,7 @@ export function LoginPage() {
 
   return (
     <div>
-      <h1 className="font-display text-xl font-semibold tracking-tight">Log in to Replot</h1>
+      <h1 className="font-display text-xl font-semibold tracking-tight">Log in to Repl</h1>
       <p className="mt-1 text-sm text-muted-foreground">Your repls and their containers are where you left them.</p>
       <form onSubmit={submit} className="mt-6 space-y-4">
         <div className="space-y-1.5">
@@ -67,7 +67,7 @@ export function LoginPage() {
         </Button>
       </form>
       <p className="mt-6 border-t pt-4 text-sm text-muted-foreground">
-        New to Replot?{" "}
+        New to Repl?{" "}
         <Link to="/register" className="text-primary hover:underline">
           Create an account
         </Link>

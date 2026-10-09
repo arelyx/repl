@@ -7,7 +7,7 @@ from django.urls import path
 
 settings.configure(
     DEBUG=True,
-    SECRET_KEY="replot-dev-only",
+    SECRET_KEY="repl-dev-only",
     ALLOWED_HOSTS=["*"],
     ROOT_URLCONF=__name__,
     MIDDLEWARE=[],

@@ -1,6 +1,6 @@
 #!/bin/bash
-# Egress policy for repl containers (Replot). Idempotent; run as root after
-# docker starts (deploy/replot-firewall.service does that).
+# Egress policy for repl containers (Repl). Idempotent; run as root after
+# docker starts (deploy/repl-firewall.service does that).
 #
 # Repl containers live on per-repl bridges carved from REPL_SUBNET_POOL
 # (10.213.0.0/16). They may reach the public internet (pip, npm, apt mirrors),
@@ -12,7 +12,7 @@ POOL=${REPL_SUBNET_POOL:-10.213.0.0/16}
 NEW_CONN_RATE=${REPL_NEW_CONN_RATE:-30/sec}
 NEW_CONN_BURST=${REPL_NEW_CONN_BURST:-60}
 EGRESS_RATE=${REPL_EGRESS_RATE:-8mb/s}      # bytes/s per container (~64 Mbit/s)
-CHAIN=REPLOT-EGRESS
+CHAIN=REPL-EGRESS
 
 for ipt in iptables; do
   $ipt -N $CHAIN 2>/dev/null || $ipt -F $CHAIN
@@ -29,10 +29,10 @@ for ipt in iptables; do
   $ipt -A $CHAIN -p tcp -m multiport --dports 25,465,587,2525 -j REJECT --reject-with tcp-reset
   # New-connection rate per container (scans, floods).
   $ipt -A $CHAIN -m conntrack --ctstate NEW -m hashlimit --hashlimit-above "$NEW_CONN_RATE" \
-       --hashlimit-burst "$NEW_CONN_BURST" --hashlimit-mode srcip --hashlimit-name replot-new -j DROP
+       --hashlimit-burst "$NEW_CONN_BURST" --hashlimit-mode srcip --hashlimit-name repl-new -j DROP
   # Bandwidth per container.
   $ipt -A $CHAIN -m hashlimit --hashlimit-above "$EGRESS_RATE" --hashlimit-burst 16mb \
-       --hashlimit-mode srcip --hashlimit-name replot-bw -j DROP
+       --hashlimit-mode srcip --hashlimit-name repl-bw -j DROP
   $ipt -A $CHAIN -j RETURN
 
   # Hook into Docker's user chain (FORWARD path) once.
@@ -47,4 +47,4 @@ done
 # Repl networks are IPv4-only (--ipv6 is not enabled on them); refuse IPv6
 # forwarding from Docker bridges outright for safety.
 ip6tables -N DOCKER-USER 2>/dev/null || true
-echo "replot firewall: egress policy for $POOL installed"
+echo "repl firewall: egress policy for $POOL installed"

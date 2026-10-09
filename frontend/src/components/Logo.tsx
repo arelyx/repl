@@ -19,7 +19,7 @@ export function Logo({ to = "/", className }: { to?: string; className?: string 
       className={cn("flex items-center gap-2 rounded-md text-sm font-semibold tracking-tight text-foreground", className)}
     >
       <LogoMark />
-      <span>Replot</span>
+      <span>Repl</span>
     </Link>
   );
 }

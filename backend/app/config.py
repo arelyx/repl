@@ -4,7 +4,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 # Secrets that ship in .env.example / older defaults; never acceptable.
 _KNOWN_DEFAULT_SECRETS = {
     "", "change-me", "change-me-internal", "change-me-too", "change-me-to-a-long-random-string",
-    "secret", "changeme", "password", "replot", "postgres",
+    "secret", "changeme", "password", "repl", "postgres",
 }
 _MIN_SECRET_LEN = 32
 
@@ -12,12 +12,12 @@ _MIN_SECRET_LEN = 32
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    DATABASE_URL: str = "postgresql+asyncpg://replot:replot@postgres:5432/replot"
+    DATABASE_URL: str = "postgresql+asyncpg://repl:repl@postgres:5432/repl"
     JWT_SECRET_KEY: str = "change-me"
     INTERNAL_SECRET: str = "change-me-internal"
-    REPLS_DIR: str = "/var/lib/replot/repls"
+    REPLS_DIR: str = "/var/lib/repl/repls"
     REPLS_HOST_DIR: str = ""
-    RUNNER_IMAGE: str = "replit-polyglot:latest"
+    RUNNER_IMAGE: str = "repl-polyglot:latest"
     REPL_NETWORK: str = "rc-repls"
     PUBLIC_HOST: str = "localhost:8380"
     IDLE_TIMEOUT_MINUTES: int = 30
@@ -26,7 +26,7 @@ class Settings(BaseSettings):
     ALLOW_INSECURE_RUNTIME: bool = False
     COLLAB_COMMAND_URL: str = "http://collaboration:1235"
     # Containers attached to every per-repl network (they proxy to / poll repls).
-    GATEWAY_CONTAINERS: str = "replot-nginx,replot-backend"
+    GATEWAY_CONTAINERS: str = "repl-nginx,repl-backend"
     # Address space for per-repl /28 networks (4096 repls in a /16).
     REPL_SUBNET_POOL: str = "10.213.0.0/16"
 
@@ -47,7 +47,7 @@ class Settings(BaseSettings):
     CORS_ORIGINS: str = ""
     ALLOW_SIGNUP: bool = True
     # Peers whose X-Forwarded-For is believed: hostnames (resolved) or CIDRs.
-    TRUSTED_PROXIES: str = "replot-nginx"
+    TRUSTED_PROXIES: str = "repl-nginx"
     AUTH_RATE_PER_MIN: int = 10          # login + register attempts per client IP
     REGISTER_RATE_PER_HOUR: int = 5      # successful-or-not sign-ups per client IP
     LOGIN_MAX_FAILURES: int = 5          # failed logins per account ...
@@ -58,6 +58,9 @@ class Settings(BaseSettings):
     MAX_UPLOAD_MB: int = 50
     MAX_ZIP_MB: int = 500
     MAX_GIT_OUTPUT_MB: int = 2
+    # New preview hostnames per 7 days the TLS proxy may get certificates for
+    # (see routers/internal.py tls_ask). -1 = unlimited (a wildcard cert).
+    PREVIEW_CERTS_PER_WEEK: int = 30
 
     @field_validator("COOKIE_SECURE", mode="before")
     @classmethod
@@ -134,9 +137,9 @@ class Settings(BaseSettings):
     REPL_LOG_MAX_SIZE: str = "5m"
     REPL_LOG_MAX_FILE: int = 2
     # systemd slice every repl container lives under, so the whole fleet can be
-    # capped in one place (`systemctl set-property replot-repls.slice
+    # capped in one place (`systemctl set-property repl-containers.slice
     # CPUQuota=1600% MemoryMax=48G`). Empty = Docker's default parent.
-    REPL_CGROUP_PARENT: str = "replot-repls.slice"
+    REPL_CGROUP_PARENT: str = "repl-containers.slice"
     # Running-container caps. Starting past the per-user cap stops that user's
     # least recently active repl(s); past the global cap, start is refused.
     MAX_RUNNING_PER_USER: int = 2

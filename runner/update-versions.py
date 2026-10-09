@@ -7,7 +7,7 @@
 Each version comes from the project's own release feed (or endoflife.date,
 which tracks them). A source that can't be reached keeps its current pin
 and is reported, so a flaky mirror never produces a broken Dockerfile.
-Rebuild afterwards with `make runner`; the build runs `replot-versions`,
+Rebuild afterwards with `make runner`; the build runs `repl-versions`,
 which fails if any toolchain doesn't start.
 """
 import json
@@ -17,7 +17,7 @@ import urllib.request
 from pathlib import Path
 
 DOCKERFILE = Path(__file__).with_name("Dockerfile")
-UA = {"User-Agent": "replot-update-versions"}
+UA = {"User-Agent": "repl-update-versions"}
 
 
 def get(url: str) -> str:
