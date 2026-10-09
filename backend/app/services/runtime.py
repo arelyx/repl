@@ -1,6 +1,7 @@
 """Docker container lifecycle for repls."""
 import asyncio
 import logging
+import threading
 import time
 
 import httpx
@@ -12,6 +13,15 @@ from app.config import settings
 log = logging.getLogger("replot.runtime")
 
 _client = None
+# Start/stop for one repl must not interleave (the editor, the page and a
+# second tab can all call start at once); one lock per repl id.
+_repl_locks: dict[str, threading.Lock] = {}
+_repl_locks_guard = threading.Lock()
+
+
+def _lock_for(repl_id: str) -> threading.Lock:
+    with _repl_locks_guard:
+        return _repl_locks.setdefault(repl_id, threading.Lock())
 # repl_id -> monotonic time of last activity
 last_active: dict[str, float] = {}
 
@@ -97,8 +107,12 @@ def _create_network(name: str, repl_id: str):
         try:
             return client.networks.create(name, driver="bridge", ipam=ipam, labels={"replot.repl": repl_id})
         except docker.errors.APIError as e:
-            if "overlap" in str(e) or "already" in str(e):
-                continue  # raced with another create, or taken outside our labels
+            msg = str(e)
+            if "network with name" in msg and "already exists" in msg:
+                # A concurrent start of the same repl created it first.
+                return client.networks.get(name)
+            if "overlap" in msg or "already" in msg:
+                continue  # subnet taken by a concurrent create or outside our labels
             raise
     raise RuntimeError("No free subnets left for repl networks")
 
@@ -122,6 +136,11 @@ def _status(repl_id: str) -> str:
 
 
 def _ensure_started(repl_id: str) -> None:
+    with _lock_for(repl_id):
+        _ensure_started_locked(repl_id)
+
+
+def _ensure_started_locked(repl_id: str) -> None:
     _ensure_network(repl_id)
     c = _get(repl_id)
     if c is not None and network_name(repl_id) not in c.attrs.get("NetworkSettings", {}).get("Networks", {}):
@@ -154,6 +173,11 @@ def _ensure_started(repl_id: str) -> None:
 
 
 def _stop(repl_id: str) -> None:
+    with _lock_for(repl_id):
+        _stop_locked(repl_id)
+
+
+def _stop_locked(repl_id: str) -> None:
     # Containers are disposable (files live on the host), so a stopped repl
     # gives back its container and its network/subnet; start recreates both.
     c = _get(repl_id)
