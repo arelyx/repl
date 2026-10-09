@@ -69,11 +69,11 @@ export function ConsolePane({ visible }: { visible: boolean }) {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex h-8 shrink-0 items-center gap-2 border-b px-2 text-xs text-muted-foreground">
+      <div className="flex h-7 shrink-0 items-center gap-2 border-b bg-card px-2 text-xs text-muted-foreground">
         <span
           className={
             "size-2 rounded-full " +
-            (runStatus?.running ? "bg-green-500" : runConnected ? "bg-muted-foreground" : "bg-red-500/70")
+            (runStatus?.running ? "bg-ok" : runConnected ? "bg-muted-foreground" : "bg-fault")
           }
         />
         <span className="truncate">{statusText}</span>

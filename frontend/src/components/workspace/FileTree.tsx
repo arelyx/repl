@@ -46,6 +46,7 @@ import { errorMessage } from "@/lib/api";
 import { replsApi } from "@/lib/repls";
 import type { FileNode } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { useCommands, type PaletteCommand } from "@/stores/palette";
 import { canEdit, useWorkspace } from "@/stores/workspace";
 
 interface TreeNode {
@@ -207,6 +208,39 @@ export function FileTree() {
     }
   };
 
+  useCommands(
+    "file-tree",
+    () => {
+      const cmds: PaletteCommand[] = [];
+      if (editable) {
+        cmds.push(
+          { id: "files:new-file", title: "New file…", group: "File actions", icon: FilePlus, run: () => create("", "file") },
+          { id: "files:new-folder", title: "New folder…", group: "File actions", icon: FolderPlus, run: () => create("", "dir") },
+          { id: "files:upload", title: "Upload files…", group: "File actions", icon: Upload, run: () => startUpload("") },
+        );
+        if (activePath) {
+          const node: TreeNode = { name: activePath.split("/").pop()!, path: activePath, type: "file", children: [] };
+          cmds.push(
+            { id: "files:rename-active", title: "Rename current file…", group: "File actions", hint: activePath, icon: Pencil, run: () => rename(node) },
+            { id: "files:delete-active", title: "Delete current file…", group: "File actions", hint: activePath, icon: Trash2, run: () => setToDelete(node) },
+          );
+        }
+      }
+      cmds.push(
+        {
+          id: "files:download",
+          title: "Download repl as zip",
+          group: "File actions",
+          icon: Download,
+          run: () => window.open(replsApi.downloadUrl(repl.id), "_self"),
+        },
+        { id: "files:refresh", title: "Refresh file list", group: "File actions", icon: RefreshCw, run: () => void refresh() },
+      );
+      return cmds;
+    },
+    [editable, activePath, repl.id],
+  );
+
   const nodeMenu = (node: TreeNode) => {
     const dir = node.type === "dir" ? node.path : parentOf(node.path);
     return [
@@ -223,21 +257,40 @@ export function FileTree() {
     const isOpen = expanded.has(node.path);
     const row = (
       <div
+        role="treeitem"
+        tabIndex={0}
+        aria-expanded={node.type === "dir" ? isOpen : undefined}
+        aria-selected={activePath === node.path}
         className={cn(
-          "group flex h-7 cursor-pointer items-center gap-1 pr-1 text-sm text-sidebar-foreground select-none hover:bg-accent/60",
-          activePath === node.path && "bg-accent text-foreground",
+          "group flex h-6 cursor-pointer items-center gap-1 pr-1 text-sm text-sidebar-foreground outline-none select-none hover:bg-accent/60 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring pointer-coarse:h-9",
+          activePath === node.path && "bg-accent text-foreground shadow-[inset_2px_0_0_var(--lang)]",
         )}
         style={{ paddingLeft: 8 + depth * 12 }}
         onClick={() => (node.type === "dir" ? toggle(node.path) : openFile(node.path))}
+        onKeyDown={(e) => {
+          if (e.target !== e.currentTarget) return;
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            if (node.type === "dir") toggle(node.path);
+            else openFile(node.path);
+          } else if (e.key === "ArrowRight" && node.type === "dir" && !isOpen) toggle(node.path);
+          else if (e.key === "ArrowLeft" && node.type === "dir" && isOpen) toggle(node.path);
+          else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+            e.preventDefault();
+            const rows = Array.from(document.querySelectorAll<HTMLElement>("[data-file-tree] [role=treeitem]"));
+            const i = rows.indexOf(e.currentTarget);
+            rows[i + (e.key === "ArrowDown" ? 1 : -1)]?.focus();
+          }
+        }}
         title={node.path}
       >
         {node.type === "dir" ? (
           <>
             {isOpen ? <ChevronDown className="size-3.5 shrink-0" /> : <ChevronRight className="size-3.5 shrink-0" />}
             {isOpen ? (
-              <FolderOpen className="size-4 shrink-0 text-primary/80" />
+              <FolderOpen className="size-4 shrink-0 text-muted-foreground" />
             ) : (
-              <Folder className="size-4 shrink-0 text-primary/80" />
+              <Folder className="size-4 shrink-0 text-muted-foreground" />
             )}
           </>
         ) : (
@@ -250,7 +303,8 @@ export function FileTree() {
         {editable && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-              <Button variant="ghost" size="icon-xs" className="ml-auto opacity-0 group-hover:opacity-100 data-[state=open]:opacity-100">
+              <Button variant="ghost" size="icon-xs" className="ml-auto opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 focus-visible:opacity-100 data-[state=open]:opacity-100 pointer-coarse:opacity-70"
+                aria-label={`Actions for ${node.name}`}>
                 <MoreHorizontal />
               </Button>
             </DropdownMenuTrigger>
@@ -304,8 +358,8 @@ export function FileTree() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex h-9 shrink-0 items-center gap-0.5 border-b px-2">
-        <span className="mr-auto text-xs font-semibold tracking-wider text-muted-foreground uppercase">Files</span>
+      <div className="flex h-8 shrink-0 items-center gap-0.5 px-2">
+        <span className="mr-auto text-xs font-semibold text-foreground">Files</span>
         {editable && (
           <>
             <Button variant="ghost" size="icon-xs" title="New file" onClick={() => create("", "file")}>
@@ -332,11 +386,11 @@ export function FileTree() {
         <ContextMenuTrigger asChild disabled={!editable}>
           <div className="min-h-0 flex-1">
             <ScrollArea className="h-full">
-              <div className="py-1">
+              <div className="py-1" role="tree" aria-label="Files" data-file-tree>
                 {!filesLoaded ? (
                   <div className="px-3 py-2 text-xs text-muted-foreground">Loading…</div>
                 ) : tree.length === 0 ? (
-                  <div className="px-3 py-2 text-xs text-muted-foreground">No files yet.</div>
+                  <div className="px-3 py-2 text-xs text-muted-foreground">No files yet. Right-click here or use New file above.</div>
                 ) : (
                   tree.map((n) => renderNode(n, 0))
                 )}
@@ -369,7 +423,7 @@ export function FileTree() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction className="bg-destructive text-white hover:bg-destructive/90" onClick={doDelete}>
+            <AlertDialogAction className="bg-destructive text-[#1c0a0b] hover:bg-destructive/90" onClick={doDelete}>
               Delete
             </AlertDialogAction>
           </AlertDialogFooter>

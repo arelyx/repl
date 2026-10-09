@@ -1,18 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import Editor, { type OnMount } from "@monaco-editor/react";
+import Editor, { type BeforeMount, type OnMount } from "@monaco-editor/react";
 import type * as Monaco from "monaco-editor";
 import { MonacoBinding } from "y-monaco";
-import { FileQuestion, Loader2, Users, WifiOff } from "lucide-react";
+import { FileQuestion, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { errorMessage } from "@/lib/api";
 import { myColor, openCollab, type CollabSession } from "@/lib/collab";
 import { imageMime, languageForPath } from "@/lib/languages";
 import { pathToUri, useLspStore } from "@/lib/lsp";
+import { CODE_FONT, defineMonacoTheme, MONACO_THEME } from "@/lib/monacoTheme";
 import { replsApi } from "@/lib/repls";
 import { useAuthStore } from "@/stores/auth";
-
-type Phase = "loading" | "connecting" | "collab" | "rest" | "binary" | "error";
-type SaveState = "saved" | "dirty" | "saving" | "error";
+import { useEditorStatus, type EditorPhase as Phase, type SaveState } from "@/stores/editorStatus";
 
 const COLLAB_TIMEOUT_MS = 3000;
 const SAVE_DEBOUNCE_MS = 800;
@@ -31,6 +30,12 @@ export function CodeEditor({ replId, path, readOnly }: { replId: string; path: s
   const [peers, setPeers] = useState(0);
   const [mounted, setMounted] = useState(false);
   const lsp = useLspStore((s) => s.manager);
+
+  // Report to the status bar (phase, save state, peers, cursor) while this file is active.
+  useEffect(() => {
+    useEditorStatus.getState().set({ path, phase, saveState, peers });
+  }, [path, phase, saveState, peers]);
+  useEffect(() => () => useEditorStatus.getState().clear(path), [path]);
 
   const editorRef = useRef<Monaco.editor.IStandaloneCodeEditor | null>(null);
   const collabRef = useRef<CollabSession | null>(null);
@@ -167,8 +172,23 @@ export function CodeEditor({ replId, path, readOnly }: { replId: string; path: s
     };
   }, [replId, path, user, tryBind, enterRest]);
 
+  const beforeMount: BeforeMount = (monaco) => defineMonacoTheme(monaco);
+
   const onMount: OnMount = (ed, monaco) => {
     editorRef.current = ed;
+    const report = () => {
+      const pos = ed.getPosition();
+      const sel = ed.getSelection();
+      const model = ed.getModel();
+      useEditorStatus.getState().set({
+        path,
+        line: pos?.lineNumber ?? 1,
+        column: pos?.column ?? 1,
+        selected: sel && model ? model.getValueInRange(sel).length : 0,
+      });
+    };
+    ed.onDidChangeCursorSelection(report);
+    report();
     if (phaseRef.current === "rest") {
       ed.setValue(restContentRef.current);
     } else {
@@ -229,7 +249,7 @@ export function CodeEditor({ replId, path, readOnly }: { replId: string; path: s
           <img
             src={`data:${mime};base64,${binary.content}`}
             alt={path}
-            className="max-h-[80%] max-w-full rounded border bg-[repeating-conic-gradient(#2b3245_0%_25%,#1c2333_0%_50%)] bg-[length:16px_16px]"
+            className="max-h-[80%] max-w-full rounded border bg-[repeating-conic-gradient(#2c3240_0%_25%,#222731_0%_50%)] bg-[length:16px_16px]"
           />
         ) : (
           <>
@@ -243,28 +263,10 @@ export function CodeEditor({ replId, path, readOnly }: { replId: string; path: s
 
   return (
     <div className="relative flex h-full flex-col">
-      <div className="absolute top-1 right-4 z-10 flex items-center gap-2 rounded bg-card/80 px-2 py-0.5 text-[11px] text-muted-foreground">
-        {phase === "connecting" && (
-          <>
-            <Loader2 className="size-3 animate-spin" /> connecting
-          </>
-        )}
-        {phase === "collab" && (
-          <>
-            <Users className="size-3 text-green-500" /> live{peers > 0 ? ` · ${peers + 1} here` : ""}
-          </>
-        )}
-        {phase === "rest" && (
-          <>
-            <WifiOff className="size-3" /> offline mode ·{" "}
-            {readOnly ? "read-only" : saveState === "saving" ? "saving…" : saveState === "dirty" ? "unsaved" : saveState === "error" ? "save failed" : "saved"}
-          </>
-        )}
-        {readOnly && phase !== "rest" && <span>· read-only</span>}
-      </div>
       <Editor
         height="100%"
-        theme="vs-dark"
+        theme={MONACO_THEME}
+        beforeMount={beforeMount}
         language={languageForPath(path)}
         path={pathToUri(path)}
         defaultValue=""
@@ -272,7 +274,13 @@ export function CodeEditor({ replId, path, readOnly }: { replId: string; path: s
         onChange={onChange}
         options={{
           readOnly: readOnly || phase === "connecting",
-          fontSize: 14,
+          fontSize: 13,
+          lineHeight: 20,
+          fontFamily: CODE_FONT,
+          fontLigatures: false,
+          renderLineHighlight: "all",
+          lineNumbersMinChars: 3,
+          stickyScroll: { enabled: true },
           minimap: { enabled: false },
           automaticLayout: true,
           scrollBeyondLastLine: false,

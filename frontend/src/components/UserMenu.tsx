@@ -1,5 +1,5 @@
 import { Link, useNavigate } from "react-router-dom";
-import { Compass, LayoutGrid, LogOut } from "lucide-react";
+import { Command, Compass, LayoutGrid, LogOut } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -8,9 +8,12 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
+  DropdownMenuShortcut,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { keyLabel } from "@/components/Kbd";
 import { useAuthStore } from "@/stores/auth";
+import { usePalette } from "@/stores/palette";
 
 export function initials(name: string) {
   return name
@@ -27,7 +30,7 @@ export function UserMenu() {
 
   if (!user) {
     return (
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1">
         <Button variant="ghost" size="sm" asChild>
           <Link to="/login">Log in</Link>
         </Button>
@@ -42,13 +45,13 @@ export function UserMenu() {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon-sm" className="rounded-full">
-          <Avatar className="size-7">
-            <AvatarFallback className="bg-primary/20 text-primary">{initials(name)}</AvatarFallback>
+        <Button variant="ghost" size="icon-sm" className="rounded-full touch-target" aria-label={`Account menu for ${name}`}>
+          <Avatar className="size-6">
+            <AvatarFallback className="bg-raise text-[11px] font-semibold text-foreground">{initials(name)}</AvatarFallback>
           </Avatar>
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-52">
+      <DropdownMenuContent align="end" className="w-56">
         <DropdownMenuLabel>
           <div className="font-medium">{name}</div>
           <div className="text-xs font-normal text-muted-foreground">@{user.username}</div>
@@ -59,6 +62,10 @@ export function UserMenu() {
         </DropdownMenuItem>
         <DropdownMenuItem onSelect={() => navigate("/explore")}>
           <Compass /> Explore
+        </DropdownMenuItem>
+        <DropdownMenuItem onSelect={() => usePalette.getState().show()}>
+          <Command /> Command palette
+          <DropdownMenuShortcut>{keyLabel("mod")} K</DropdownMenuShortcut>
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem

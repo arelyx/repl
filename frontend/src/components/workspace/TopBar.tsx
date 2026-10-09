@@ -1,61 +1,45 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { ChevronLeft, GitFork, Globe, Loader2, Lock, Play, Share2, Square } from "lucide-react";
 import { toast } from "sonner";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Kbd } from "@/components/Kbd";
 import { LogoMark } from "@/components/Logo";
+import { PaletteTrigger } from "@/components/PaletteTrigger";
 import { UserMenu } from "@/components/UserMenu";
 import { ShareDialog } from "@/components/workspace/ShareDialog";
+import type { RunControl } from "@/hooks/useRunControl";
 import { errorMessage } from "@/lib/api";
 import { replsApi } from "@/lib/repls";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/stores/auth";
-import { canEdit, useWorkspace } from "@/stores/workspace";
+import { useWorkspace } from "@/stores/workspace";
 
-function ContainerBadge() {
-  const container = useWorkspace((s) => s.container);
-  const running = useWorkspace((s) => s.runStatus?.running);
-  const map: Record<string, { label: string; dot: string }> = {
-    unknown: { label: "checking", dot: "bg-muted-foreground" },
-    starting: { label: "starting", dot: "bg-yellow-500 animate-pulse" },
-    running: { label: running ? "running" : "ready", dot: running ? "bg-green-500 animate-pulse" : "bg-green-500" },
-    stopped: { label: "stopped", dot: "bg-muted-foreground" },
-    missing: { label: "not started", dot: "bg-muted-foreground" },
-    error: { label: "error", dot: "bg-red-500" },
-  };
-  const s = map[container] ?? map.unknown!;
-  return (
-    <Badge variant="outline" className="gap-1.5 font-normal text-muted-foreground">
-      <span className={cn("size-2 rounded-full", s.dot)} />
-      {s.label}
-    </Badge>
-  );
-}
-
-export function TopBar({ onStartContainer }: { onStartContainer: () => void }) {
+export function TopBar({
+  ctl,
+  shareOpen,
+  setShareOpen,
+  renaming,
+  setRenaming,
+}: {
+  ctl: RunControl;
+  shareOpen: boolean;
+  setShareOpen: (o: boolean) => void;
+  renaming: boolean;
+  setRenaming: (r: boolean) => void;
+}) {
   const repl = useWorkspace((s) => s.repl)!;
   const container = useWorkspace((s) => s.container);
-  const runStatus = useWorkspace((s) => s.runStatus);
-  const runConnected = useWorkspace((s) => s.runConnected);
-  const runSend = useWorkspace((s) => s.runSend);
   const user = useAuthStore((s) => s.user);
-  const navigate = useNavigate();
-  const editable = canEdit(repl);
   const isOwner = repl.role === "owner";
   const [name, setName] = useState(repl.name);
-  const [editingName, setEditingName] = useState(false);
-  const [shareOpen, setShareOpen] = useState(false);
-  const [forking, setForking] = useState(false);
-  const [pending, setPending] = useState(false);
 
   useEffect(() => setName(repl.name), [repl.name]);
-  useEffect(() => setPending(false), [runStatus]);
 
   const saveName = async () => {
-    setEditingName(false);
+    setRenaming(false);
     const next = name.trim();
     if (!next || next === repl.name) {
       setName(repl.name);
@@ -64,65 +48,35 @@ export function TopBar({ onStartContainer }: { onStartContainer: () => void }) {
     try {
       const updated = await replsApi.update(repl.id, { name: next });
       useWorkspace.getState().setRepl({ ...repl, ...updated, role: repl.role });
+      toast.success(`Renamed to ${updated.name}`);
     } catch (e) {
       setName(repl.name);
       toast.error(`Rename failed: ${errorMessage(e)}`);
     }
   };
 
-  const running = !!runStatus?.running;
-  const run = () => {
-    if (container !== "running") {
-      onStartContainer();
-      return;
-    }
-    const ws = useWorkspace.getState();
-    if (!running) ws.setToolTab(repl.config?.gui ? "display" : "console");
-    if (runSend?.({ type: running ? "stop" : "start" })) {
-      setPending(true);
-      setTimeout(() => setPending(false), 4000);
-    } else {
-      toast.error("Console isn't connected yet");
-    }
-  };
-
-  const fork = async () => {
-    if (!user) {
-      navigate("/login", { state: { from: { pathname: `/repl/${repl.id}` } } });
-      return;
-    }
-    setForking(true);
-    try {
-      const forked = await replsApi.fork(repl.id);
-      toast.success(`Forked into ${forked.name}`);
-      navigate(`/repl/${forked.id}`);
-    } catch (e) {
-      toast.error(`Fork failed: ${errorMessage(e)}`);
-    } finally {
-      setForking(false);
-    }
-  };
-
-  const runDisabled = !editable || container === "starting" || (container === "running" && !runConnected) || pending;
+  const { run, running, pending, disabled, editable, fork, forking } = ctl;
+  const busy = pending || container === "starting";
 
   return (
-    <header className="flex h-12 shrink-0 items-center gap-2 border-b bg-card px-2">
+    <header className="flex h-[38px] shrink-0 items-center gap-1.5 border-b bg-card px-1.5 sm:gap-2 sm:px-2">
       <Tooltip>
         <TooltipTrigger asChild>
-          <Button variant="ghost" size="icon-sm" asChild>
-            <Link to={user ? "/dashboard" : "/"}>
+          <Button variant="ghost" size="icon-sm" className="touch-target" asChild>
+            <Link to={user ? "/dashboard" : "/"} aria-label="Back to my repls">
               <ChevronLeft />
             </Link>
           </Button>
         </TooltipTrigger>
         <TooltipContent>Back to my repls</TooltipContent>
       </Tooltip>
-      <LogoMark className="size-5" />
-      <div className="flex min-w-0 items-center gap-2">
-        {!isOwner && <span className="hidden text-sm text-muted-foreground sm:inline">@{repl.owner.username} /</span>}
-        {editingName ? (
+      <LogoMark className="hidden size-4 sm:block" />
+      <div className="flex min-w-0 items-center gap-1 text-sm">
+        {!isOwner && <span className="hidden text-muted-foreground lg:inline">{repl.owner.username} /</span>}
+        {renaming ? (
           <Input
             autoFocus
+            aria-label="Repl name"
             value={name}
             onChange={(e) => setName(e.target.value)}
             onBlur={() => void saveName()}
@@ -130,58 +84,62 @@ export function TopBar({ onStartContainer }: { onStartContainer: () => void }) {
               if (e.key === "Enter") void saveName();
               if (e.key === "Escape") {
                 setName(repl.name);
-                setEditingName(false);
+                setRenaming(false);
               }
             }}
-            className="h-7 w-56"
+            className="h-6 w-40 px-1.5 sm:w-56"
           />
         ) : (
           <button
-            className={cn(
-              "truncate rounded px-1.5 py-0.5 text-sm font-medium",
-              isOwner && "hover:bg-accent",
-            )}
-            title={isOwner ? "Click to rename" : repl.name}
-            onClick={() => isOwner && setEditingName(true)}
+            className={cn("truncate rounded-md px-1.5 py-0.5 font-medium", isOwner && "hover:bg-accent")}
+            title={isOwner ? "Rename" : repl.name}
+            onClick={() => isOwner && setRenaming(true)}
+            disabled={!isOwner}
           >
             {repl.name}
           </button>
         )}
-        {repl.is_public ? (
-          <Globe className="size-3.5 shrink-0 text-muted-foreground" />
-        ) : (
-          <Lock className="size-3.5 shrink-0 text-muted-foreground" />
-        )}
+        <span className="shrink-0 text-muted-foreground" title={repl.is_public ? "Public" : "Private"}>
+          {repl.is_public ? <Globe className="size-3.5" aria-label="Public" /> : <Lock className="size-3.5" aria-label="Private" />}
+        </span>
       </div>
 
-      <div className="mx-auto flex items-center gap-3">
-        <Button
-          onClick={run}
-          disabled={runDisabled}
-          className={cn(
-            "h-8 min-w-24 font-semibold text-white",
-            running ? "bg-red-600 hover:bg-red-600/90" : "bg-[#f26207] hover:bg-[#f26207]/90",
-          )}
-          title={editable ? (running ? "Stop" : "Run") : "Fork this repl to run it"}
-        >
-          {pending || container === "starting" ? (
-            <Loader2 className="animate-spin" />
-          ) : running ? (
-            <Square className="fill-current" />
-          ) : (
-            <Play className="fill-current" />
-          )}
-          {container === "starting" ? "Starting" : running ? "Stop" : "Run"}
-        </Button>
-        <ContainerBadge />
-      </div>
+      <PaletteTrigger label="Search files and commands" className="ml-auto w-full max-w-sm md:mx-auto" />
 
-      <div className="flex items-center gap-1">
-        <Button variant="ghost" size="sm" onClick={fork} disabled={forking}>
+      <div className="flex shrink-0 items-center gap-1">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              onClick={run}
+              disabled={disabled}
+              aria-keyshortcuts="Control+Enter Meta+Enter"
+              title={editable ? undefined : "Fork this repl to run it"}
+              className={cn(
+                "h-7 min-w-[4.75rem] gap-1.5 px-2.5 font-semibold",
+                running
+                  ? "bg-fault text-[#1c0a0b] hover:bg-fault/90"
+                  : "bg-ignition text-ignition-ink hover:bg-ignition/90",
+              )}
+            >
+              {busy ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : running ? (
+                <Square className="size-3 fill-current" />
+              ) : (
+                <Play className="size-3 fill-current" />
+              )}
+              {container === "starting" ? "Starting" : running ? "Stop" : "Run"}
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent className="flex items-center gap-2">
+            {editable ? (running ? "Stop" : "Run") : "Fork this repl to run it"} {editable && <Kbd keys={["mod", "enter"]} />}
+          </TooltipContent>
+        </Tooltip>
+        <Button variant="ghost" size="sm" onClick={() => void fork()} disabled={forking} className="max-sm:px-1.5" aria-label="Fork">
           {forking ? <Loader2 className="animate-spin" /> : <GitFork />}
           <span className="hidden md:inline">Fork</span>
         </Button>
-        <Button variant="secondary" size="sm" onClick={() => setShareOpen(true)}>
+        <Button variant="ghost" size="sm" onClick={() => setShareOpen(true)} className="max-sm:px-1.5" aria-label="Share">
           <Share2 /> <span className="hidden md:inline">Share</span>
         </Button>
         <UserMenu />
