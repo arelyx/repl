@@ -1,0 +1,9 @@
+{
+  "r": {
+    "command": ["R", "--no-echo", "--no-save", "--no-restore", "-e",
+                "options(languageserver.default_linters = lintr::linters_with_tags('correctness')); languageserver::run()"],
+    "settings": {
+      "r": {"lsp": {"diagnostics": true, "rich_documentation": false, "snippet_support": true}}
+    }
+  }
+}

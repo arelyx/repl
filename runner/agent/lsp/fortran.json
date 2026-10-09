@@ -1,0 +1,7 @@
+{
+  "fortran": {
+    "command": ["python3", "/opt/replagent/compiler_ls.py", "fortran", "--check", "--",
+                "fortls", "--notify_init", "--hover_signature", "--hover_language", "fortran",
+                "--use_signature_help", "--lowercase_intrinsics"]
+  }
+}

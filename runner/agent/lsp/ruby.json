@@ -1,0 +1,15 @@
+{
+  "ruby": {
+    "command": ["python3", "/opt/replagent/compiler_ls.py", "ruby", "--pull-diagnostics", "--hold-until", "$/progress", "--", "replot-ruby-lsp"],
+    "initializationOptions": {
+      "enabledFeatures": {
+        "diagnostics": true, "completion": true, "hover": true, "signatureHelp": true,
+        "definition": true, "documentSymbols": true, "documentHighlights": true, "documentLink": true,
+        "foldingRanges": true, "selectionRanges": true, "inlayHint": true, "codeActions": true,
+        "semanticHighlighting": false, "formatting": false, "onTypeFormatting": false
+      },
+      "formatter": "none",
+      "linters": []
+    }
+  }
+}

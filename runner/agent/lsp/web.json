@@ -1,0 +1,44 @@
+{
+  "html": {
+    "command": ["vscode-html-language-server", "--stdio"],
+    "initializationOptions": {
+      "provideFormatter": true,
+      "embeddedLanguages": {"css": true, "javascript": true}
+    },
+    "settings": {
+      "html": {"validate": {"scripts": true, "styles": true}, "suggest": {"html5": true}, "hover": {"documentation": true, "references": true}},
+      "css": {"validate": true},
+      "javascript": {"validate": {"enable": true}}
+    }
+  },
+  "css": {
+    "command": ["vscode-css-language-server", "--stdio"],
+    "initializationOptions": {"provideFormatter": true},
+    "settings": {
+      "css": {"validate": true, "hover": {"documentation": true, "references": true}},
+      "scss": {"validate": true},
+      "less": {"validate": true}
+    }
+  },
+  "json": {
+    "command": ["vscode-json-language-server", "--stdio"],
+    "initializationOptions": {"provideFormatter": true},
+    "settings": {
+      "json": {
+        "validate": {"enable": true},
+        "format": {"enable": true},
+        "schemaDownload": {"enable": true},
+        "schemas": [
+          {"fileMatch": ["package.json"], "url": "https://json.schemastore.org/package.json"},
+          {"fileMatch": ["tsconfig.json", "tsconfig.*.json"], "url": "https://json.schemastore.org/tsconfig.json"},
+          {"fileMatch": ["jsconfig.json"], "url": "https://json.schemastore.org/jsconfig.json"},
+          {"fileMatch": ["composer.json"], "url": "https://json.schemastore.org/composer.json"},
+          {"fileMatch": [".eslintrc", ".eslintrc.json"], "url": "https://json.schemastore.org/eslintrc.json"},
+          {"fileMatch": [".prettierrc", ".prettierrc.json"], "url": "https://json.schemastore.org/prettierrc.json"},
+          {"fileMatch": [".babelrc", ".babelrc.json", "babel.config.json"], "url": "https://json.schemastore.org/babelrc.json"},
+          {"fileMatch": ["deno.json", "deno.jsonc"], "url": "https://json.schemastore.org/deno.json"}
+        ]
+      }
+    }
+  }
+}

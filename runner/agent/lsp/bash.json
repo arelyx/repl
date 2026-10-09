@@ -1,0 +1,11 @@
+{
+  "bash": {
+    "command": ["bash-language-server", "start"],
+    "settings": {
+      "bashIde": {
+        "shellcheckPath": "/usr/local/bin/shellcheck",
+        "backgroundAnalysisMaxFiles": 200
+      }
+    }
+  }
+}
