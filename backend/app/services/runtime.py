@@ -157,6 +157,12 @@ def _ensure_started_locked(repl_id: str) -> None:
             network=network_name(repl_id),
             volumes={f"{settings.repls_host_dir}/{repl_id}": {"bind": "/home/runner/app", "mode": "rw"}},
             mem_limit="2g",
+            # No swap: a repl that hits 2 GB is OOM-killed inside its own
+            # cgroup instead of pushing the host into swap.
+            memswap_limit="2g",
+            # If the host itself runs out of memory, the kernel should pick a
+            # repl before anything else on the machine.
+            oom_score_adj=800,
             nano_cpus=2_000_000_000,
             pids_limit=1024,
             cap_drop=["ALL"],

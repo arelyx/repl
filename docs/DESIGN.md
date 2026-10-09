@@ -340,6 +340,46 @@ Workspace layout (resizable panels):
 Run auto-focuses the Console. When a new port starts listening, the Webview
 tab opens. For `gui = true` templates, Run focuses Display.
 
+### Intellisense (language servers)
+
+Every language gets a real language server inside the repl's container.
+
+- **Bridge:** the agent serves `WS /lsp/{server}`. Each connection starts one
+  server from its spec in `runner/agent/lsp/*.json`, and each WebSocket frame
+  carries one JSON-RPC message.
+- **Routing:** nginx routes `/ws/repls/{id}/lsp/{server}` behind
+  `auth_request`, and only editors may connect, because servers run project
+  code such as build scripts.
+- **Client:** the frontend's own LSP client in `frontend/src/lib/lsp/` drives
+  Monaco's completion, hover, signature help, diagnostics, definitions,
+  references, rename, formatting and code actions.
+- **Installation:** installers live in `runner/lsp-install/*.sh`, and
+  `runner/agent/lsp_test.py` is the end-to-end check every server must pass.
+
+**Memory safety.** Language servers are large JVM, .NET and Node processes,
+and one of them, JetBrains' Kotlin LSP 263.x, has run away. During its
+build-time index warm-up it once grew to about 30 GB of native memory in 3
+minutes, despite `-Xmx3g`. `docker build` steps have no memory limit and run
+with `oom_score_adj` -500, so the host OOM killer took down the desktop
+session instead of the build. A second run aborted natively after a heap OOM
+at 1 GB. Five capped reruns finished normally at a 2.5–2.9 GB peak, so the
+runaway is intermittent and its trigger is unknown. The defenses are layered:
+
+1. **No heavy work inside `docker build`.** `runner/build.sh`, which
+   `make runner` calls, builds the image, then pre-builds the Kotlin index in
+   a throwaway container. That container has `--memory=4g --memory-swap=4g`,
+   so it gets no swap, plus `--oom-score-adj=1000` and a 300 s hard timeout.
+   `runner/kotlin-index/warm.sh` also kills the warm-up at 3.5 GB RSS. The
+   index is layered into the image only on success. Otherwise the image ships
+   without it, and Kotlin indexes on first open.
+2. **Per-server memory limit in the bridge.** Each server's process group is
+   polled every 2 s. Past `maxMemoryMB` (default 1280; jdtls 1500, kotlin
+   1700) the group is killed and the user sees a message. The server is then
+   refused with HTTP 503 for 5 minutes, and the editor stops reconnecting.
+3. **Repl containers are hard-capped:** 2 GB with no swap
+   (`memswap_limit` = `mem_limit`). They also run with `oom_score_adj` 800, so
+   a host-wide OOM picks a repl before anything else on the machine.
+
 ## 9. Security notes
 
 - User code runs in containers as uid 1000 with dropped capabilities,

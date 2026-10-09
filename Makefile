@@ -1,7 +1,7 @@
 .PHONY: runner versions update-versions up down logs smoke
 
 runner:            ## Build the polyglot repl image (slow the first time)
-	docker build -t replit-polyglot:latest runner/
+	runner/build.sh replit-polyglot:latest
 
 versions:          ## Print every toolchain version in the runner image
 	docker run --rm --entrypoint replot-versions replit-polyglot:latest
