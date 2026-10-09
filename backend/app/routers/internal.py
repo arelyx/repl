@@ -14,7 +14,9 @@ from app.services.repls import ROLE_RANK, get_role
 
 router = APIRouter(prefix="/internal", tags=["internal"])
 
-SERVICE_MIN_ROLE = {"run": "viewer", "shell": "editor", "vnc": "editor"}
+# lsp needs editor: language servers run project code (build scripts,
+# Maven/Gradle imports), so they are as powerful as a shell.
+SERVICE_MIN_ROLE = {"run": "viewer", "shell": "editor", "vnc": "editor", "lsp": "editor"}
 
 
 @router.get("/auth-repl")
