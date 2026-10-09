@@ -3,6 +3,12 @@
 
 name: replot
 
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   nginx:
     build:
@@ -14,6 +20,8 @@ services:
       - "127.0.0.1:${HTTP_PORT:-8380}:80"
     networks: [internal, repls]
     depends_on: [backend, collaboration]
+    mem_limit: 256m
+    logging: *logging
 
   backend:
     build: ./backend
@@ -27,9 +35,36 @@ services:
       - REPLS_HOST_DIR=${REPLS_HOST_DIR}
       - RUNNER_IMAGE=${RUNNER_IMAGE:-replit-polyglot:latest}
       - REPL_NETWORK=rc-repls
-      - REPL_RUNTIME=${REPL_RUNTIME:-}
       - PUBLIC_HOST=${PUBLIC_HOST:-localhost:8380}
       - IDLE_TIMEOUT_MINUTES=${IDLE_TIMEOUT_MINUTES:-30}
+      # App hardening
+      - APP_ENV=${APP_ENV:-production}
+      - PUBLIC_SCHEME=${PUBLIC_SCHEME:-http}
+      - PREVIEW_HOST=${PREVIEW_HOST:-}
+      - COOKIE_SECURE=${COOKIE_SECURE:-}
+      - JWT_EXPIRE_DAYS=${JWT_EXPIRE_DAYS:-7}
+      - CORS_ORIGINS=${CORS_ORIGINS:-}
+      - ALLOW_SIGNUP=${ALLOW_SIGNUP:-true}
+      - TRUSTED_PROXIES=${TRUSTED_PROXIES:-replot-nginx}
+      - AUTH_RATE_PER_MIN=${AUTH_RATE_PER_MIN:-10}
+      - REGISTER_RATE_PER_HOUR=${REGISTER_RATE_PER_HOUR:-5}
+      - LOGIN_MAX_FAILURES=${LOGIN_MAX_FAILURES:-5}
+      - LOGIN_FAILURE_WINDOW_MIN=${LOGIN_FAILURE_WINDOW_MIN:-15}
+      - MAX_REPLS_PER_USER=${MAX_REPLS_PER_USER:-50}
+      - MAX_FILE_READ_MB=${MAX_FILE_READ_MB:-10}
+      - MAX_UPLOAD_MB=${MAX_UPLOAD_MB:-50}
+      - MAX_ZIP_MB=${MAX_ZIP_MB:-500}
+      - MAX_GIT_OUTPUT_MB=${MAX_GIT_OUTPUT_MB:-2}
+      # Repl runtime limits
+      - REPL_RUNTIME=${REPL_RUNTIME:-}
+      - REPL_CPUS=${REPL_CPUS:-1}
+      - REPL_MEMORY=${REPL_MEMORY:-1g}
+      - REPL_PIDS=${REPL_PIDS:-256}
+      - REPL_CGROUP_PARENT=${REPL_CGROUP_PARENT:-}
+      - MAX_RUNNING_PER_USER=${MAX_RUNNING_PER_USER:-3}
+      - MAX_RUNNING_REPLS=${MAX_RUNNING_REPLS:-20}
+      - REPL_DISK_QUOTA_MB=${REPL_DISK_QUOTA_MB:-2048}
+      - MAX_CONTAINER_HOURS=${MAX_CONTAINER_HOURS:-12}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       # Same absolute path inside and out, so paths handed to the Docker
@@ -39,6 +74,10 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    mem_limit: 1g
+    pids_limit: 512
+    cpus: 2
+    logging: *logging
 
   collaboration:
     build: ./collaboration
@@ -48,6 +87,8 @@ services:
       - BACKEND_URL=http://backend:8000
       - INTERNAL_SECRET=${INTERNAL_SECRET}
     networks: [internal]
+    mem_limit: 512m
+    logging: *logging
 
   postgres:
     image: postgres:18.2-alpine
@@ -65,6 +106,8 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
+    mem_limit: 1g
+    logging: *logging
 
 networks:
   internal:

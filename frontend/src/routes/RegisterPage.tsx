@@ -79,8 +79,8 @@ export function RegisterPage() {
         {field(
           "password",
           "Password",
-          { type: "password", required: true, minLength: 8, autoComplete: "new-password" },
-          "At least 8 characters.",
+          { type: "password", required: true, minLength: 10, autoComplete: "new-password" },
+          "At least 10 characters.",
         )}
         {error && (
           <p role="alert" className="text-sm text-destructive">

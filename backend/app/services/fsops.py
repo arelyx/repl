@@ -1,10 +1,11 @@
 """Filesystem helpers for repl working trees. Blocking; call via run_in_threadpool."""
 import base64
 import errno
-import io
 import os
 import shutil
 import stat
+import tempfile
+import time
 import tomllib
 import zipfile
 from contextlib import contextmanager
@@ -169,10 +170,21 @@ def _open_beneath(repl_id: str, rel: str, flags: int, create_parents: bool = Fal
     return fd
 
 
+def _too_large(what: str, limit: int) -> HTTPException:
+    return HTTPException(status_code=413, detail=f"{what} exceeds the {limit // (1024 * 1024)} MB limit")
+
+
 def _read_bytes(repl_id: str, rel: str) -> bytes:
+    limit = settings.MAX_FILE_READ_MB * 1024 * 1024
     fd = _open_beneath(repl_id, rel, os.O_RDONLY)
     with os.fdopen(fd, "rb") as f:
-        return f.read()
+        if os.fstat(f.fileno()).st_size > limit:
+            raise _too_large("File", limit)
+        # Read one byte past the limit in case the file grew since fstat.
+        data = f.read(limit + 1)
+    if len(data) > limit:
+        raise _too_large("File", limit)
+    return data
 
 
 def read_file(repl_id: str, rel: str) -> dict:
@@ -238,30 +250,94 @@ def delete_node(repl_id: str, rel: str) -> None:
             os.unlink(name, dir_fd=dir_fd)
 
 
-def zip_repl(repl_id: str) -> bytes:
-    # Open every file relative to its parent's fd with O_NOFOLLOW and check
-    # the fd is a regular file, so a symlink swapped in mid-walk can't make
-    # root read outside the repl, and a FIFO can't block us.
-    root = str(repl_root(repl_id))
-    buf = io.BytesIO()
-    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-        for dirpath, dirnames, filenames, dirfd in os.fwalk(root, follow_symlinks=False):
-            dirnames[:] = [d for d in dirnames if d != ".git"]
-            for f in filenames:
+MAX_WALK_ENTRIES = 500_000
+
+
+def disk_usage(path: str | Path, stop_after: int | None = None) -> int:
+    """Bytes allocated under `path` (like `du -s`, hard links counted once),
+    without following symlinks. Stops early once past `stop_after`; a tree with
+    more than MAX_WALK_ENTRIES entries counts as over any limit."""
+    total = 0
+    entries = 0
+    seen: set[tuple[int, int]] = set()
+    try:
+        for _dirpath, dirnames, filenames, dirfd in os.fwalk(str(path), follow_symlinks=False):
+            for n in dirnames + filenames:
+                entries += 1
                 try:
-                    fd = os.open(f, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=dirfd)
+                    st = os.stat(n, dir_fd=dirfd, follow_symlinks=False)
                 except OSError:
-                    continue  # symlink (ELOOP), vanished, unreadable...
-                try:
-                    if not stat.S_ISREG(os.fstat(fd).st_mode):
+                    continue
+                if st.st_nlink > 1:
+                    if (st.st_dev, st.st_ino) in seen:
                         continue
-                    os.set_blocking(fd, True)
-                    with os.fdopen(fd, "rb", closefd=False) as fh:
-                        data = fh.read()
-                finally:
-                    os.close(fd)
-                zf.writestr(os.path.relpath(os.path.join(dirpath, f), root), data)
-    return buf.getvalue()
+                    seen.add((st.st_dev, st.st_ino))
+                total += st.st_blocks * 512
+            if stop_after is not None and (total > stop_after or entries > MAX_WALK_ENTRIES):
+                return max(total, stop_after + 1)
+    except FileNotFoundError:
+        return 0
+    return total
+
+
+def quota_bytes() -> int:
+    return settings.REPL_DISK_QUOTA_MB * 1024 * 1024
+
+
+def check_quota(repl_id: str, adding: int = 0) -> None:
+    quota = quota_bytes()
+    used = disk_usage(repl_root(repl_id), stop_after=max(quota - adding, 0))
+    if used + adding > quota:
+        raise HTTPException(
+            status_code=413, detail=f"Repl would exceed its {settings.REPL_DISK_QUOTA_MB} MB disk quota"
+        )
+
+
+def zip_repl(repl_id: str) -> str:
+    """Zip the repl into a temp file and return its path (caller deletes it).
+
+    Every file is opened relative to its parent's fd with O_NOFOLLOW and
+    checked to be a regular file, so a symlink swapped in mid-walk can't make
+    root read outside the repl, and a FIFO can't block us. Input is streamed
+    in chunks and capped at MAX_ZIP_MB (uncompressed) -> 413.
+    """
+    limit = settings.MAX_ZIP_MB * 1024 * 1024
+    root = str(repl_root(repl_id))
+    fd_out, out_path = tempfile.mkstemp(prefix="replot-zip-", suffix=".zip")
+    total = 0
+    try:
+        with os.fdopen(fd_out, "wb") as raw, zipfile.ZipFile(raw, "w", zipfile.ZIP_DEFLATED) as zf:
+            for dirpath, dirnames, filenames, dirfd in os.fwalk(root, follow_symlinks=False):
+                dirnames[:] = [d for d in dirnames if d != ".git"]
+                for f in filenames:
+                    try:
+                        fd = os.open(f, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=dirfd)
+                    except OSError:
+                        continue  # symlink (ELOOP), vanished, unreadable...
+                    try:
+                        st = os.fstat(fd)
+                        if not stat.S_ISREG(st.st_mode):
+                            continue
+                        if total + st.st_size > limit:
+                            raise _too_large("Download", limit)
+                        os.set_blocking(fd, True)
+                        arcname = os.path.relpath(os.path.join(dirpath, f), root)
+                        # 315532800 = 1980-01-01, the earliest zip timestamp.
+                        info = zipfile.ZipInfo(arcname, time.localtime(max(st.st_mtime, 315532800))[:6])
+                        info.compress_type = zipfile.ZIP_DEFLATED
+                        info.external_attr = (st.st_mode & 0xFFFF) << 16
+                        with os.fdopen(fd, "rb", closefd=False) as fh, zf.open(info, "w", force_zip64=True) as dst:
+                            while chunk := fh.read(1024 * 1024):
+                                total += len(chunk)
+                                if total > limit:
+                                    raise _too_large("Download", limit)
+                                dst.write(chunk)
+                    finally:
+                        os.close(fd)
+    except BaseException:
+        os.unlink(out_path)
+        raise
+    return out_path
 
 
 def parse_replit(path: Path) -> dict:

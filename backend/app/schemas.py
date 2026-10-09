@@ -15,13 +15,18 @@ class UserOut(BaseModel):
 class RegisterIn(BaseModel):
     email: EmailStr
     username: str = Field(min_length=2, max_length=32, pattern=r"^[A-Za-z0-9_-]+$")
-    password: str = Field(min_length=6, max_length=128)
+    password: str = Field(min_length=10, max_length=128)
     display_name: str | None = Field(default=None, max_length=255)
 
 
 class LoginIn(BaseModel):
-    login: str
-    password: str
+    login: str = Field(max_length=255)
+    password: str = Field(max_length=128)
+
+
+class PasswordChangeIn(BaseModel):
+    current_password: str = Field(max_length=128)
+    new_password: str = Field(min_length=10, max_length=128)
 
 
 class OwnerOut(BaseModel):
