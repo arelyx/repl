@@ -1257,6 +1257,8 @@ class Server:
     def from_client(self, msg):
         method = msg.get("method")
         params = msg.get("params") or {}
+        if self.child and method == "textDocument/didChange":
+            self.ranged_changes(params)
         self.track_document(method, params)
 
         if not self.child:
@@ -1282,6 +1284,30 @@ class Server:
             uri = params["textDocument"]["uri"]
             threading.Timer(0.3, self.pull, args=(uri, params["textDocument"].get("version"))).start()
         return method == "exit"
+
+    def ranged_changes(self, params):
+        """Rewrite whole-document changes (no "range") as one ranged edit.
+
+        Both forms are valid LSP whatever sync kind a server advertises, but
+        asm-lsp 0.10.1 exits on a range-less change ("Bad edit info, failed
+        to edit tree - Error: Invalid edit range"). Editors send full text
+        after a reload or a remote reset, so the wrapped server must never
+        see one. Positions are UTF-16 code units, as LSP requires."""
+        uri = params.get("textDocument", {}).get("uri")
+        with self.docs_lock:
+            doc = self.docs.get(uri)
+            if not doc:
+                return
+            shadow = Document(uri, doc.text, doc.version)
+        out = []
+        for ch in params.get("contentChanges") or []:
+            if ch.get("range") is None:
+                lines = shadow.text.split("\n")
+                end = {"line": len(lines) - 1, "character": index_to_utf16(lines[-1], len(lines[-1]))}
+                ch = {"range": {"start": {"line": 0, "character": 0}, "end": end}, "text": ch.get("text", "")}
+            shadow.apply([ch], shadow.version)
+            out.append(ch)
+        params["contentChanges"] = out
 
     def track_document(self, method, params):
         if method == "textDocument/didOpen":

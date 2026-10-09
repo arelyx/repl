@@ -1,12 +1,20 @@
 {
   "haskell": {
-    "command": ["haskell-language-server-wrapper", "--lsp"],
+    "command": [
+      "haskell-language-server-9.14.1",
+      "--lsp",
+      "+RTS",
+      "-A16M",
+      "-N2",
+      "-RTS"
+    ],
     "settings": {
       "haskell": {
         "formattingProvider": "none",
         "checkProject": false,
         "maxCompletions": 40
       }
-    }
+    },
+    "_comment": "haskell-language-server-9.14.1 directly (the wrapper doesn't forward +RTS). The binary's built-in -A128M allocation area per capability took HLS to ~1.8 GB on a 6-line file; -A16M -N2 peaks ~0.9 GB."
   }
 }
