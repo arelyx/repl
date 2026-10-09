@@ -6,6 +6,6 @@
     "initializationOptions": {
       "indexDir": "/home/runner/.cache/kotlin-lsp"
     },
-    "maxMemoryMB": 1700
+    "maxMemoryMB": 1300
   }
 }

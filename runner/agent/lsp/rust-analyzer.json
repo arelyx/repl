@@ -46,7 +46,6 @@
           "capacity": 64
         }
       }
-    },
-    "maxMemoryMB": 1500
+    }
   }
 }

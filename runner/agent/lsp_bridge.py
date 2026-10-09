@@ -25,20 +25,42 @@ SERVERS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "lsp")
 APP_DIR = "/home/runner/app"
 MAX_MESSAGE = 64 * 1024 * 1024
 
-# Memory guard. A language server whose process group grows past its limit
-# (spec "maxMemoryMB", default below) is killed, and the server is refused
-# for COOLDOWN seconds so the editor's reconnect loop can't restart a runaway
-# over and over. The container's own 2 GB cgroup is the hard backstop; this
+# Memory guard. A language server whose process group's anonymous memory
+# grows past its limit (spec "maxMemoryMB", default below) is killed, and the
+# server is refused for COOLDOWN seconds so the editor's reconnect loop can't
+# restart a runaway over and over. The container's own 2 GB cgroup is the hard backstop; this
 # keeps one server from starving the user's program and shell first.
-DEFAULT_MAX_MEMORY_MB = 1280
+DEFAULT_MAX_MEMORY_MB = 1024
 MEMORY_POLL_SECONDS = 2.0
 COOLDOWN_SECONDS = 300
-_PAGE = os.sysconf("SC_PAGE_SIZE")
 _cooldown_until: dict[str, float] = {}
 
 
-def _group_rss_mb(pgid: int) -> int:
-    """Resident memory of every process in a process group, in MB."""
+def _anon_kb(pid: str) -> int:
+    """Anonymous memory of one process, in kB.
+
+    Plain RSS (statm) also counts file pages the process has mapped: the
+    server's .jar files, kotlin-lsp's mmap'd RocksDB index, shared libraries.
+    Those are page cache the kernel can drop, and gVisor's statm counts them
+    too, so a healthy Kotlin server reads ~1.9 GB of "RSS" while only ~1.1 GB
+    is charged to the container. Anonymous memory (heap, JIT, native arenas)
+    is what can't be reclaimed and what a runaway grows.
+    """
+    try:
+        with open(f"/proc/{pid}/smaps_rollup") as f:  # Linux; absent in gVisor
+            text = f.read()
+    except FileNotFoundError:
+        with open(f"/proc/{pid}/smaps") as f:
+            text = f.read()
+    total = 0
+    for line in text.splitlines():
+        if line.startswith("Anonymous:"):
+            total += int(line.split()[1])
+    return total
+
+
+def _group_anon_mb(pgid: int) -> int:
+    """Anonymous memory of every process in a process group, in MB."""
     total = 0
     for entry in os.listdir("/proc"):
         if not entry.isdigit():
@@ -50,11 +72,10 @@ def _group_rss_mb(pgid: int) -> int:
             # 1st, pgrp the 3rd.
             if int(stat[stat.rindex(")") + 2:].split()[2]) != pgid:
                 continue
-            with open(f"/proc/{entry}/statm") as f:
-                total += int(f.read().split()[1]) * _PAGE
+            total += _anon_kb(entry)
         except (OSError, ValueError, IndexError):
             continue
-    return total // (1024 * 1024)
+    return total // 1024
 
 
 def load_servers() -> dict:
@@ -189,7 +210,7 @@ def make_handler(child_env, on_open, on_close):
             limit = int(spec.get("maxMemoryMB", DEFAULT_MAX_MEMORY_MB))
             while server.proc and server.proc.returncode is None:
                 await asyncio.sleep(MEMORY_POLL_SECONDS)
-                rss = _group_rss_mb(server.proc.pid)
+                rss = _group_anon_mb(server.proc.pid)
                 if rss <= limit:
                     continue
                 print(f"lsp: {name} using {rss} MB (limit {limit} MB); stopping it", flush=True)
