@@ -1,0 +1,8 @@
+{
+  "pyright": {
+    "command": ["pyright-langserver", "--stdio"],
+    "settings": {
+      "python": {"analysis": {"typeCheckingMode": "standard", "autoSearchPaths": true, "useLibraryCodeForTypes": true, "diagnosticMode": "openFilesOnly"}}
+    }
+  }
+}

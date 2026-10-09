@@ -6,6 +6,7 @@ Listens on 0.0.0.0:8008 and exposes:
   GET /ports   -> {"ports": [...]}  TCP ports in LISTEN state (minus our own)
   WS  /run     -> the single shared Run process (scrollback replay + status)
   WS  /shell   -> a fresh `bash -l` PTY per connection
+  WS  /lsp/{server} -> a language server over JSON-RPC (see lsp_bridge.py)
 
 Only aiohttp + stdlib.
 """
@@ -22,6 +23,8 @@ import termios
 import tomllib
 
 from aiohttp import WSMsgType, web
+
+import lsp_bridge
 
 APP_DIR = "/home/runner/app"
 REPLIT_FILE = os.path.join(APP_DIR, ".replit")
@@ -579,6 +582,17 @@ def main():
     app.router.add_get("/ports", ports)
     app.router.add_get("/run", run_ws)
     app.router.add_get("/shell", shell_ws)
+
+    def lsp_open():
+        global total_clients
+        total_clients += 1
+
+    def lsp_close():
+        global total_clients
+        total_clients -= 1
+
+    app.router.add_get("/lsp/{server}", lsp_bridge.make_handler(
+        lambda: child_env(read_replit().get("port")), lsp_open, lsp_close))
     web.run_app(app, host="0.0.0.0", port=8008, access_log=None, print=None,
                 handle_signals=True)
 

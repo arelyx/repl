@@ -195,6 +195,10 @@ ENV JAVA_HOME=/opt/java DOTNET_ROOT=/opt/dotnet SBCL_HOME=/opt/sbcl/lib/sbcl \
 RUN printf 'export PATH="%s"\nexport JAVA_HOME=%s DOTNET_ROOT=%s SBCL_HOME=%s RUSTUP_HOME=%s\n' \
        "$PATH" "$JAVA_HOME" "$DOTNET_ROOT" "$SBCL_HOME" "$RUSTUP_HOME" > /etc/profile.d/00-replot-toolchains.sh
 
+# Language servers for editor intellisense (one installer per server).
+COPY lsp-install/ /tmp/lsp-install/
+RUN set -e; for f in /tmp/lsp-install/*.sh; do echo "== $f"; bash -euo pipefail "$f"; done; rm -rf /tmp/lsp-install
+
 # Every toolchain must actually run; fail the build otherwise.
 COPY versions.sh /usr/local/bin/replot-versions
 RUN chmod +x /usr/local/bin/replot-versions && replot-versions
