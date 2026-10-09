@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { Command as CommandPrimitive } from "cmdk";
 import { Loader2, Search } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -7,25 +8,27 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Switch } from "@/components/ui/switch";
+import { Kbd } from "@/components/Kbd";
 import { LangIcon } from "@/components/LangIcon";
 import { CATEGORY_LABELS, CATEGORY_ORDER, useTemplates } from "@/hooks/useTemplates";
 import { errorMessage } from "@/lib/api";
+import { langName } from "@/lib/langAccent";
 import { replsApi } from "@/lib/repls";
-import { cn } from "@/lib/utils";
 
 const ADJ = ["quick", "brave", "sunny", "witty", "fuzzy", "lucky", "shiny", "cosmic", "gentle", "spicy"];
 const NOUN = ["otter", "panda", "falcon", "comet", "pickle", "waffle", "nebula", "cactus", "badger", "tofu"];
 const randomName = () =>
   `${ADJ[Math.floor(Math.random() * ADJ.length)]}-${NOUN[Math.floor(Math.random() * NOUN.length)]}-${Math.floor(Math.random() * 100)}`;
 
+/**
+ * Template picker in the palette idiom: type to filter, arrows to choose, Enter to create.
+ */
 export function CreateReplDialog({
   open,
   onOpenChange,
@@ -37,8 +40,7 @@ export function CreateReplDialog({
 }) {
   const { templates, error } = useTemplates();
   const navigate = useNavigate();
-  const [query, setQuery] = useState("");
-  const [selected, setSelected] = useState<string | null>(initialTemplate ?? null);
+  const [selected, setSelected] = useState<string>(initialTemplate ?? "");
   const [name, setName] = useState(randomName);
   const [isPublic, setIsPublic] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -46,38 +48,34 @@ export function CreateReplDialog({
   useEffect(() => {
     if (open) {
       setName(randomName());
-      setQuery("");
-      setSelected(initialTemplate ?? null);
+      setSelected(initialTemplate ?? templates?.[0]?.slug ?? "");
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, initialTemplate]);
 
+  useEffect(() => {
+    if (open && !selected && templates?.length) setSelected(templates[0]!.slug);
+  }, [open, selected, templates]);
+
   const grouped = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const list = (templates ?? []).filter(
-      (t) =>
-        !q ||
-        t.name.toLowerCase().includes(q) ||
-        t.language.toLowerCase().includes(q) ||
-        t.slug.includes(q) ||
-        t.description.toLowerCase().includes(q),
-    );
-    const cats = [...CATEGORY_ORDER, ...new Set(list.map((t) => t.category))].filter(
-      (c, i, a) => a.indexOf(c) === i,
-    );
+    const list = templates ?? [];
+    const cats = [...CATEGORY_ORDER, ...new Set(list.map((t) => t.category))].filter((c, i, a) => a.indexOf(c) === i);
     return cats
       .map((c) => ({ category: c, items: list.filter((t) => t.category === c) }))
       .filter((g) => g.items.length > 0);
-  }, [templates, query]);
+  }, [templates]);
 
-  const create = async () => {
-    if (!selected || !name.trim()) return;
+  const tpl = templates?.find((t) => t.slug === selected) ?? null;
+
+  const create = async (slug = selected) => {
+    if (!slug || !name.trim() || busy) return;
     setBusy(true);
     try {
-      const repl = await replsApi.create({ name: name.trim(), template: selected, is_public: isPublic });
+      const repl = await replsApi.create({ name: name.trim(), template: slug, is_public: isPublic });
       onOpenChange(false);
       navigate(`/repl/${repl.id}`);
     } catch (e) {
-      toast.error(`Couldn't create repl: ${errorMessage(e)}`);
+      toast.error(`Couldn't create the repl: ${errorMessage(e)}`);
     } finally {
       setBusy(false);
     }
@@ -85,87 +83,103 @@ export function CreateReplDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[90vh] flex-col sm:max-w-3xl">
-        <DialogHeader>
-          <DialogTitle>Create a repl</DialogTitle>
-          <DialogDescription>Pick a template, name it, and you're off.</DialogDescription>
+      <DialogContent className="flex max-h-[92dvh] flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl">
+        <DialogHeader className="border-b px-4 py-3 text-left">
+          <DialogTitle className="text-[15px]">New repl</DialogTitle>
+          <DialogDescription className="text-xs">
+            Pick a template and name it. From the keyboard: type to filter, arrows to choose, Enter to create.
+          </DialogDescription>
         </DialogHeader>
-        <div className="relative">
-          <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            autoFocus
-            placeholder="Search languages and frameworks…"
-            className="pl-9"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
-        </div>
-        <ScrollArea className="h-[45vh] rounded-md border">
-          <div className="space-y-5 p-3">
-            {error && <p className="text-sm text-destructive">Failed to load templates: {error}</p>}
-            {!templates && !error && (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="size-4 animate-spin" /> Loading templates…
-              </div>
-            )}
-            {templates && grouped.length === 0 && (
-              <p className="text-sm text-muted-foreground">No templates match "{query}".</p>
-            )}
-            {grouped.map((g) => (
-              <div key={g.category}>
-                <div className="mb-2 text-xs font-semibold tracking-wider text-muted-foreground uppercase">
-                  {CATEGORY_LABELS[g.category] ?? g.category}
+        <div className="flex min-h-0 flex-1 flex-col sm:flex-row">
+          <CommandPrimitive
+            label="Templates"
+            value={selected}
+            onValueChange={setSelected}
+            loop
+            className="flex min-h-0 flex-1 flex-col sm:border-r"
+          >
+            <div className="flex h-10 shrink-0 items-center gap-2 border-b px-3">
+              <Search className="size-3.5 shrink-0 text-muted-foreground" />
+              <CommandPrimitive.Input
+                autoFocus
+                placeholder="Search languages and frameworks"
+                aria-label="Search templates"
+                className="h-full w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground focus-visible:outline-none"
+              />
+            </div>
+            <CommandPrimitive.List className="h-[34dvh] overflow-y-auto p-1 sm:h-[46dvh] [&_[cmdk-group-heading]]:px-2.5 [&_[cmdk-group-heading]]:pt-2 [&_[cmdk-group-heading]]:pb-1 [&_[cmdk-group-heading]]:text-xs [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:text-muted-foreground">
+              {error && <p className="p-3 text-sm text-destructive">Couldn't load templates: {error}</p>}
+              {!templates && !error && (
+                <div className="flex items-center gap-2 p-3 text-sm text-muted-foreground">
+                  <Loader2 className="size-4 animate-spin" /> Loading templates…
                 </div>
-                <div className="grid grid-cols-2 gap-2 md:grid-cols-3">
+              )}
+              <CommandPrimitive.Empty className="p-3 text-sm text-muted-foreground">
+                No template matches. Pick the closest language; the shell can install the rest.
+              </CommandPrimitive.Empty>
+              {grouped.map((g) => (
+                <CommandPrimitive.Group key={g.category} heading={CATEGORY_LABELS[g.category] ?? g.category}>
                   {g.items.map((t) => (
-                    <button
+                    <CommandPrimitive.Item
                       key={t.slug}
-                      type="button"
-                      onClick={() => setSelected(t.slug)}
-                      onDoubleClick={() => {
-                        setSelected(t.slug);
-                        void create();
-                      }}
-                      className={cn(
-                        "flex items-center gap-3 rounded-md border p-2 text-left transition-colors hover:bg-accent",
-                        selected === t.slug && "border-primary bg-primary/10",
-                      )}
+                      value={t.slug}
+                      keywords={[t.name, t.language, t.description]}
+                      onSelect={() => void create(t.slug)}
+                      className="flex min-h-8 cursor-default items-center gap-2.5 rounded-md px-2.5 py-1 text-sm data-[selected=true]:bg-accent pointer-coarse:min-h-10"
                     >
-                      <LangIcon language={t.language} icon={t.icon} />
-                      <div className="min-w-0">
-                        <div className="truncate text-sm font-medium">{t.name}</div>
-                        <div className="truncate text-xs text-muted-foreground">{t.description}</div>
-                      </div>
-                    </button>
+                      <LangIcon language={t.language} label={t.name} className="size-5 text-[10px]" />
+                      <span className="w-28 shrink-0 truncate font-medium">{t.name}</span>
+                      <span className="min-w-0 truncate text-xs text-muted-foreground">{t.description}</span>
+                    </CommandPrimitive.Item>
                   ))}
+                </CommandPrimitive.Group>
+              ))}
+            </CommandPrimitive.List>
+          </CommandPrimitive>
+
+          <div className="flex shrink-0 flex-col gap-4 border-t p-4 sm:w-64 sm:border-t-0">
+            {tpl && (
+              <div className="hidden space-y-1.5 sm:block">
+                <div className="flex items-center gap-2">
+                  <LangIcon language={tpl.language} label={tpl.name} />
+                  <div className="min-w-0">
+                    <div className="truncate font-medium">{tpl.name}</div>
+                    {langName(tpl.language) !== tpl.name && (
+                      <div className="text-xs text-muted-foreground">{langName(tpl.language)}</div>
+                    )}
+                  </div>
                 </div>
+                <p className="text-xs text-muted-foreground">{tpl.description}</p>
+                <p className="text-xs text-muted-foreground">
+                  Run command <code className="font-mono text-foreground">{tpl.run}</code>
+                </p>
               </div>
-            ))}
-          </div>
-        </ScrollArea>
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
-          <div className="flex-1 space-y-2">
-            <Label htmlFor="repl-name">Name</Label>
-            <Input
-              id="repl-name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && void create()}
-            />
-          </div>
-          <div className="flex h-9 items-center gap-2">
-            <Switch id="repl-public" checked={isPublic} onCheckedChange={setIsPublic} />
-            <Label htmlFor="repl-public">Public</Label>
+            )}
+            <div className="space-y-1.5">
+              <Label htmlFor="repl-name">Name</Label>
+              <Input
+                id="repl-name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && void create()}
+              />
+            </div>
+            <div className="flex items-start gap-2.5">
+              <Switch id="repl-public" checked={isPublic} onCheckedChange={setIsPublic} aria-describedby="repl-public-help" />
+              <div>
+                <Label htmlFor="repl-public">Public</Label>
+                <p id="repl-public-help" className="text-xs text-muted-foreground">
+                  Anyone can view and fork it.
+                </p>
+              </div>
+            </div>
+            <Button className="mt-auto w-full" onClick={() => void create()} disabled={!selected || !name.trim() || busy}>
+              {busy && <Loader2 className="animate-spin" />}
+              {tpl ? `Create ${tpl.name} repl` : "Create repl"}
+              <Kbd keys={["enter"]} className="ml-auto hidden opacity-80 sm:inline-flex" />
+            </Button>
           </div>
         </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
-          </Button>
-          <Button onClick={create} disabled={!selected || !name.trim() || busy}>
-            {busy && <Loader2 className="animate-spin" />} Create repl
-          </Button>
-        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

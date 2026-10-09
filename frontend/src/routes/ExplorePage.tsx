@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { Loader2, Search } from "lucide-react";
 import { toast } from "sonner";
 import { Input } from "@/components/ui/input";
-import { ReplCard } from "@/components/ReplCard";
+import { ReplTable } from "@/components/ReplCard";
 import { errorMessage } from "@/lib/api";
 import { replsApi } from "@/lib/repls";
 import type { Repl } from "@/lib/types";
@@ -20,7 +20,7 @@ export function ExplorePage() {
       .explore()
       .then(setRepls)
       .catch((e) => {
-        toast.error(`Failed to load: ${errorMessage(e)}`);
+        toast.error(`Couldn't load public repls: ${errorMessage(e)}`);
         setRepls([]);
       });
   }, []);
@@ -51,29 +51,35 @@ export function ExplorePage() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="space-y-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Explore</h1>
-          <p className="text-sm text-muted-foreground">Public repls from the community. Fork one to remix it.</p>
+          <h1 className="font-display text-xl font-semibold tracking-tight">Explore</h1>
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            Public repls from everyone on this server. Open one to read it, fork it to run your own copy.
+          </p>
         </div>
         <div className="relative sm:w-72">
-          <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input placeholder="Search…" className="pl-9" value={q} onChange={(e) => setQ(e.target.value)} />
+          <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Filter by name, language or owner"
+            aria-label="Filter public repls"
+            className="pl-8"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+          />
         </div>
       </div>
       {!repls ? (
-        <div className="flex items-center gap-2 text-muted-foreground">
-          <Loader2 className="size-4 animate-spin" /> Loading…
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Loader2 className="size-4 animate-spin" /> Loading public repls…
         </div>
+      ) : repls.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No public repls yet. Make one of yours public from its Share dialog.</p>
       ) : filtered.length === 0 ? (
-        <p className="text-muted-foreground">No public repls yet.</p>
+        <p className="text-sm text-muted-foreground">No public repls match “{q}”.</p>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {filtered.map((r) => (
-            <ReplCard key={r.id} repl={r} showOwner onFork={fork} />
-          ))}
-        </div>
+        <ReplTable repls={filtered} showOwner showRole={false} onFork={fork} label="Public repls" />
       )}
     </div>
   );

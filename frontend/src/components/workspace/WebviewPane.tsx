@@ -56,11 +56,11 @@ export function WebviewPane() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex h-9 shrink-0 items-center gap-1.5 border-b px-2">
+      <div className="flex h-7 shrink-0 items-center gap-1.5 border-b bg-card px-1.5">
         <Button variant="ghost" size="icon-xs" title="Reload" disabled={!url} onClick={() => setNonce((n) => n + 1)}>
           <RotateCw />
         </Button>
-        <div className="flex h-6 min-w-0 flex-1 items-center gap-1.5 rounded bg-muted px-2 font-mono text-xs text-muted-foreground">
+        <div className="flex h-5 min-w-0 flex-1 items-center gap-1.5 rounded-md border bg-background px-2 font-mono text-xs text-muted-foreground">
           <Globe className="size-3 shrink-0" />
           <span className="truncate">{url ?? "No web server"}</span>
         </div>
@@ -99,7 +99,7 @@ export function WebviewPane() {
       ) : (
         <div className="flex flex-1 flex-col items-center justify-center gap-2 p-6 text-center text-sm text-muted-foreground">
           <Globe className="size-8 opacity-40" />
-          No web server running — start one and it'll show up here
+          No web server yet. Start one (Run does it for web templates) and it opens here.
         </div>
       )}
     </div>

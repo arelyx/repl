@@ -14,24 +14,106 @@ const prettyLanguage = (path: string) => {
 };
 
 function SeverityIcon({ severity, className }: { severity: Diagnostic["severity"]; className?: string }) {
-  if (severity === 2) return <AlertTriangle className={cn("size-3.5 text-yellow-500", className)} />;
-  if (severity === 3) return <Info className={cn("size-3.5 text-sky-400", className)} />;
+  if (severity === 2) return <AlertTriangle className={cn("size-3.5 text-warn", className)} />;
+  if (severity === 3) return <Info className={cn("size-3.5 text-caret", className)} />;
   if (severity === 4) return <Lightbulb className={cn("size-3.5 text-muted-foreground", className)} />;
-  return <CircleX className={cn("size-3.5 text-red-500", className)} />;
+  return <CircleX className={cn("size-3.5 text-fault", className)} />;
 }
 
-/** The strip under the editor: language-server state and the Problems list. */
-export function LspStatusBar({ path, readOnly }: { path: string | null; readOnly: boolean }) {
+/** Status-bar item class: sits on the language-colored bar, ink text, darkened on hover. */
+export const statusItem =
+  "flex h-full shrink-0 items-center gap-1.5 px-2 whitespace-nowrap outline-none hover:bg-black/10 focus-visible:bg-black/15 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-lang-ink";
+
+/** Language-server state for the active file, shown in the status bar. */
+export function LspStatusItem({ path, readOnly }: { path: string | null; readOnly: boolean }) {
   const manager = useLspStore((s) => s.manager);
   const statuses = useLspStore((s) => s.statuses);
-  const diagnostics = useLspStore((s) => s.diagnostics);
-  const [open, setOpen] = useState(false);
-
   const route = path ? serverForPath(path) : null;
   const status = route ? statuses[route.server] : undefined;
   const label = route ? (SERVERS[route.server]?.label ?? route.server) : "";
 
-  const current = path ? diagnostics[pathToUri(path)]?.items ?? [] : [];
+  if (!path) return null;
+
+  let state: React.ReactNode;
+  if (readOnly || !manager) {
+    state = (
+      <>
+        <ZapOff className="size-3" /> Read-only, no intellisense
+      </>
+    );
+  } else if (!route) {
+    state = (
+      <>
+        <ZapOff className="size-3" /> No intellisense for {prettyLanguage(path)}
+      </>
+    );
+  } else if (!status || status.state === "connecting" || status.state === "initializing") {
+    state = (
+      <>
+        <Loader2 className="size-3 animate-spin" /> Starting {label}…
+      </>
+    );
+  } else if (status.state === "idle") {
+    state = (
+      <>
+        <Loader2 className="size-3 animate-spin" /> {label} waits for the container
+      </>
+    );
+  } else if (status.state === "reconnecting") {
+    state = (
+      <>
+        <Loader2 className="size-3 animate-spin" /> Reconnecting to {label}…
+      </>
+    );
+  } else if (status.state === "unavailable") {
+    state = (
+      <span className="flex items-center gap-1.5" title={status.message ?? undefined}>
+        <ZapOff className="size-3" /> No intellisense for {label}
+        {status.message && status.message !== "not installed" && (
+          <button
+            className="ml-0.5 flex items-center gap-1 rounded-sm px-1 underline-offset-2 hover:underline"
+            onClick={() => manager.retry(route.server)}
+          >
+            <RotateCw className="size-3" /> Retry
+          </button>
+        )}
+      </span>
+    );
+  } else if (status.state === "ready" && status.busy) {
+    state = (
+      <span className="flex min-w-0 items-center gap-1.5" title={status.message ?? undefined}>
+        <Loader2 className="size-3 shrink-0 animate-spin" />
+        <span className="max-w-56 truncate">
+          {label}: {status.message}
+        </span>
+      </span>
+    );
+  } else if (status.state === "ready") {
+    state = (
+      <>
+        <Sparkles className="size-3" /> {label}
+      </>
+    );
+  }
+
+  return (
+    <div
+      className="flex h-full min-w-0 items-center gap-1.5 px-2"
+      data-testid="lsp-status"
+      data-state={status?.state ?? (route ? "none" : "unsupported")}
+    >
+      {state}
+    </div>
+  );
+}
+
+/** Error/warning counts for the active file; opens the Problems list for all open files. */
+export function ProblemsButton({ path, readOnly }: { path: string | null; readOnly: boolean }) {
+  const manager = useLspStore((s) => s.manager);
+  const diagnostics = useLspStore((s) => s.diagnostics);
+  const [open, setOpen] = useState(false);
+
+  const current = path ? (diagnostics[pathToUri(path)]?.items ?? []) : [];
   const errors = current.filter((d) => (d.severity ?? 1) === 1).length;
   const warnings = current.filter((d) => d.severity === 2).length;
 
@@ -49,137 +131,69 @@ export function LspStatusBar({ path, readOnly }: { path: string | null; readOnly
   );
   const total = files.reduce((n, f) => n + f.items.length, 0);
 
-  if (!path) return null;
-
-  let state: React.ReactNode;
-  if (readOnly || !manager) {
-    state = (
-      <span className="flex items-center gap-1.5">
-        <ZapOff className="size-3" /> Read-only · no intellisense
-      </span>
-    );
-  } else if (!route) {
-    state = (
-      <span className="flex items-center gap-1.5">
-        <ZapOff className="size-3" /> No intellisense for {prettyLanguage(path)}
-      </span>
-    );
-  } else if (!status || status.state === "connecting" || status.state === "initializing") {
-    state = (
-      <span className="flex items-center gap-1.5">
-        <Loader2 className="size-3 animate-spin" /> Starting {label}…
-      </span>
-    );
-  } else if (status.state === "idle") {
-    state = (
-      <span className="flex items-center gap-1.5">
-        <Loader2 className="size-3 animate-spin" /> {label}: waiting for the container
-      </span>
-    );
-  } else if (status.state === "reconnecting") {
-    state = (
-      <span className="flex items-center gap-1.5">
-        <Loader2 className="size-3 animate-spin" /> Reconnecting to {label}…
-      </span>
-    );
-  } else if (status.state === "unavailable") {
-    state = (
-      <span className="flex items-center gap-1.5" title={status.message ?? undefined}>
-        <ZapOff className="size-3" /> No intellisense for {label}
-        {status.message && status.message !== "not installed" && (
-          <button
-            className="ml-1 flex items-center gap-1 rounded px-1 hover:bg-accent hover:text-foreground"
-            onClick={() => manager.retry(route.server)}
-          >
-            <RotateCw className="size-3" /> retry
-          </button>
-        )}
-      </span>
-    );
-  } else if (status.state === "ready" && status.busy) {
-    state = (
-      <span className="flex min-w-0 items-center gap-1.5" title={status.message ?? undefined}>
-        <Loader2 className="size-3 shrink-0 animate-spin" />
-        <span className="truncate">
-          {label}: {status.message}
-        </span>
-      </span>
-    );
-  } else if (status.state === "ready") {
-    state = (
-      <span className="flex items-center gap-1.5">
-        <Sparkles className="size-3 text-green-500" /> {label}
-      </span>
-    );
-  }
+  if (!path || !manager || readOnly) return null;
 
   return (
-    <div className="flex h-6 shrink-0 items-center justify-between gap-3 border-t bg-card px-3 text-[11px] text-muted-foreground">
-      <div className="min-w-0" data-testid="lsp-status" data-state={status?.state ?? (route ? "none" : "unsupported")}>
-        {state}
-      </div>
-      {manager && !readOnly && (
-        <Popover open={open} onOpenChange={setOpen}>
-          <PopoverTrigger asChild>
-            <button
-              className="flex shrink-0 items-center gap-2 rounded px-1.5 py-0.5 hover:bg-accent hover:text-foreground"
-              title={`${total} problem${total === 1 ? "" : "s"} in open files`}
-              data-testid="lsp-problems"
-            >
-              <span className="flex items-center gap-1">
-                <CircleX className={cn("size-3", errors ? "text-red-500" : "")} /> {errors}
-              </span>
-              <span className="flex items-center gap-1">
-                <AlertTriangle className={cn("size-3", warnings ? "text-yellow-500" : "")} /> {warnings}
-              </span>
-            </button>
-          </PopoverTrigger>
-          <PopoverContent align="end" side="top" className="w-[min(36rem,90vw)] p-0">
-            <div className="border-b px-3 py-2 text-xs font-medium">
-              Problems <span className="text-muted-foreground">({total})</span>
-            </div>
-            {total === 0 ? (
-              <div className="px-3 py-6 text-center text-xs text-muted-foreground">No problems in open files.</div>
-            ) : (
-              <div className="max-h-80 overflow-y-auto">
-                <div className="py-1">
-                  {files.map((f) => (
-                    <div key={f.uri}>
-                      <div className="sticky top-0 bg-popover px-3 py-1 text-xs font-medium text-foreground">
-                        {f.path} <span className="text-muted-foreground">({f.items.length})</span>
-                      </div>
-                      {f.items.map((d, i) => (
-                        <button
-                          key={i}
-                          className="flex w-full items-start gap-2 px-3 py-1 text-left text-xs hover:bg-accent"
-                          onClick={() => {
-                            setOpen(false);
-                            manager.reveal(f.uri, toRange(d.range));
-                          }}
-                        >
-                          <SeverityIcon severity={d.severity} className="mt-0.5 shrink-0" />
-                          <span className="min-w-0 flex-1 break-words">
-                            {d.message}
-                            {(d.source || d.code !== undefined) && (
-                              <span className="ml-1 text-muted-foreground">
-                                {d.source}
-                                {d.code !== undefined ? `(${d.code})` : ""}
-                              </span>
-                            )}
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          className={cn(statusItem, "tabular")}
+          title={`${total} problem${total === 1 ? "" : "s"} in open files`}
+          aria-label={`${errors} errors, ${warnings} warnings in this file. Show problems.`}
+          data-testid="lsp-problems"
+        >
+          <span className={cn("flex items-center gap-1", errors > 0 && "font-bold")}>
+            <CircleX className="size-3" /> {errors}
+          </span>
+          <span className={cn("flex items-center gap-1", warnings > 0 && "font-bold")}>
+            <AlertTriangle className="size-3" /> {warnings}
+          </span>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="end" side="top" className="w-[min(36rem,92vw)] p-0">
+        <div className="border-b px-3 py-2 text-xs font-medium">
+          Problems <span className="tabular text-muted-foreground">{total}</span>
+        </div>
+        {total === 0 ? (
+          <div className="px-3 py-6 text-center text-xs text-muted-foreground">No problems in open files.</div>
+        ) : (
+          <div className="max-h-80 overflow-y-auto">
+            <div className="py-1">
+              {files.map((f) => (
+                <div key={f.uri}>
+                  <div className="sticky top-0 bg-popover px-3 py-1 font-mono text-xs text-foreground">
+                    {f.path} <span className="tabular font-sans text-muted-foreground">{f.items.length}</span>
+                  </div>
+                  {f.items.map((d, i) => (
+                    <button
+                      key={i}
+                      className="flex w-full items-start gap-2 px-3 py-1 text-left text-xs hover:bg-accent"
+                      onClick={() => {
+                        setOpen(false);
+                        manager.reveal(f.uri, toRange(d.range));
+                      }}
+                    >
+                      <SeverityIcon severity={d.severity} className="mt-0.5 shrink-0" />
+                      <span className="min-w-0 flex-1 break-words">
+                        {d.message}
+                        {(d.source || d.code !== undefined) && (
+                          <span className="ml-1 text-muted-foreground">
+                            {d.source}
+                            {d.code !== undefined ? `(${d.code})` : ""}
                           </span>
-                          <span className="shrink-0 text-muted-foreground">
-                            [{d.range.start.line + 1}, {d.range.start.character + 1}]
-                          </span>
-                        </button>
-                      ))}
-                    </div>
+                        )}
+                      </span>
+                      <span className="tabular shrink-0 text-muted-foreground">
+                        {d.range.start.line + 1}:{d.range.start.character + 1}
+                      </span>
+                    </button>
                   ))}
                 </div>
-              </div>
-            )}
-          </PopoverContent>
-        </Popover>
-      )}
-    </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </PopoverContent>
+    </Popover>
   );
 }

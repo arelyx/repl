@@ -1,10 +1,11 @@
-import { useEffect } from "react";
-import { Code2, X } from "lucide-react";
+import { Fragment, useEffect } from "react";
+import { ChevronRight, X } from "lucide-react";
 import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
+import { Kbd } from "@/components/Kbd";
 import { CodeEditor } from "@/components/workspace/CodeEditor";
-import { LspStatusBar } from "@/components/workspace/LspStatusBar";
 import { LspManager, setActiveManager, useLspStore } from "@/lib/lsp";
 import { cn } from "@/lib/utils";
+import { usePalette } from "@/stores/palette";
 import { canEdit, useWorkspace } from "@/stores/workspace";
 
 export function EditorArea() {
@@ -37,32 +38,41 @@ export function EditorArea() {
     manager?.syncOpenTabs(openTabs);
   }, [manager, openTabs]);
 
+  const crumbs = activePath ? activePath.split("/") : [];
+
   return (
-    <div className="flex h-full flex-col bg-[#1e1e1e]">
+    <div className="flex h-full flex-col bg-background">
       <ScrollArea className="shrink-0 border-b bg-card">
-        <div className="flex h-9">
+        <div className="flex h-8" role="tablist" aria-label="Open files">
           {openTabs.map((p) => {
             const name = p.split("/").pop();
+            const active = p === activePath;
             return (
               <div
                 key={p}
                 title={p}
-                onClick={() => openFile(p)}
                 onAuxClick={(e) => e.button === 1 && closeFile(p)}
                 className={cn(
-                  "group flex cursor-pointer items-center gap-2 border-r px-3 text-sm whitespace-nowrap",
-                  p === activePath
-                    ? "border-t-2 border-t-primary bg-[#1e1e1e] text-foreground"
-                    : "text-muted-foreground hover:text-foreground",
+                  "group relative flex items-center border-r text-sm whitespace-nowrap",
+                  active
+                    ? "bg-background text-foreground before:absolute before:inset-x-0 before:top-0 before:h-0.5 before:bg-lang"
+                    : "text-muted-foreground hover:bg-accent/50 hover:text-foreground",
                 )}
               >
-                {name}
                 <button
-                  className="rounded p-0.5 opacity-60 hover:bg-accent hover:opacity-100"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    closeFile(p);
-                  }}
+                  role="tab"
+                  aria-selected={active}
+                  className="h-full pr-1 pl-3 outline-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
+                  onClick={() => openFile(p)}
+                >
+                  {name}
+                </button>
+                <button
+                  className={cn(
+                    "mr-1.5 rounded-sm p-0.5 hover:bg-accent hover:text-foreground focus-visible:opacity-100",
+                    active ? "opacity-70" : "opacity-0 group-hover:opacity-70 pointer-coarse:opacity-70",
+                  )}
+                  onClick={() => closeFile(p)}
                   aria-label={`Close ${name}`}
                 >
                   <X className="size-3" />
@@ -73,17 +83,35 @@ export function EditorArea() {
         </div>
         <ScrollBar orientation="horizontal" />
       </ScrollArea>
+      {activePath && (
+        <nav
+          aria-label="Breadcrumb"
+          className="flex h-6 shrink-0 items-center gap-0.5 overflow-hidden px-3 text-xs whitespace-nowrap text-muted-foreground"
+        >
+          <span className="truncate">{repl.name}</span>
+          {crumbs.map((c, i) => (
+            <Fragment key={i}>
+              <ChevronRight className="size-3 shrink-0 opacity-60" />
+              <span className={cn("truncate", i === crumbs.length - 1 && "text-foreground")}>{c}</span>
+            </Fragment>
+          ))}
+        </nav>
+      )}
       <div className="min-h-0 flex-1">
         {activePath ? (
           <CodeEditor key={`${activePath}#${fsEpoch}`} replId={repl.id} path={activePath} readOnly={!editable} />
         ) : (
-          <div className="flex h-full flex-col items-center justify-center gap-2 text-sm text-muted-foreground">
-            <Code2 className="size-10 opacity-30" />
-            Open a file from the sidebar to start editing.
+          <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center text-sm text-muted-foreground">
+            <p>No file open.</p>
+            <button
+              className="flex items-center gap-2 rounded-md border px-3 py-1.5 text-foreground hover:bg-accent"
+              onClick={() => usePalette.getState().show("files")}
+            >
+              Go to file <Kbd keys={["mod", "P"]} />
+            </button>
           </div>
         )}
       </div>
-      <LspStatusBar path={activePath} readOnly={!editable} />
     </div>
   );
 }

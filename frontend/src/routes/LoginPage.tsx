@@ -2,7 +2,6 @@ import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { errorMessage } from "@/lib/api";
@@ -32,46 +31,47 @@ export function LoginPage() {
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Log in</CardTitle>
-        <CardDescription>Welcome back. Your repls are waiting.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={submit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="login">Email or username</Label>
-            <Input
-              id="login"
-              autoComplete="username"
-              required
-              value={form.login}
-              onChange={(e) => setForm({ ...form, login: e.target.value })}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
-            <Input
-              id="password"
-              type="password"
-              autoComplete="current-password"
-              required
-              value={form.password}
-              onChange={(e) => setForm({ ...form, password: e.target.value })}
-            />
-          </div>
-          {error && <p className="text-sm text-destructive">{error}</p>}
-          <Button type="submit" className="w-full" disabled={busy}>
-            {busy && <Loader2 className="animate-spin" />} Log in
-          </Button>
-          <p className="text-center text-sm text-muted-foreground">
-            New to Replot?{" "}
-            <Link to="/register" className="text-primary hover:underline">
-              Create an account
-            </Link>
+    <div>
+      <h1 className="font-display text-xl font-semibold tracking-tight">Log in to Replot</h1>
+      <p className="mt-1 text-sm text-muted-foreground">Your repls and their containers are where you left them.</p>
+      <form onSubmit={submit} className="mt-6 space-y-4">
+        <div className="space-y-1.5">
+          <Label htmlFor="login">Email or username</Label>
+          <Input
+            id="login"
+            autoComplete="username"
+            autoFocus
+            required
+            value={form.login}
+            onChange={(e) => setForm({ ...form, login: e.target.value })}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="password">Password</Label>
+          <Input
+            id="password"
+            type="password"
+            autoComplete="current-password"
+            required
+            value={form.password}
+            onChange={(e) => setForm({ ...form, password: e.target.value })}
+          />
+        </div>
+        {error && (
+          <p role="alert" className="text-sm text-destructive">
+            {error}
           </p>
-        </form>
-      </CardContent>
-    </Card>
+        )}
+        <Button type="submit" className="w-full" disabled={busy}>
+          {busy && <Loader2 className="animate-spin" />} Log in
+        </Button>
+      </form>
+      <p className="mt-6 border-t pt-4 text-sm text-muted-foreground">
+        New to Replot?{" "}
+        <Link to="/register" className="text-primary hover:underline">
+          Create an account
+        </Link>
+      </p>
+    </div>
   );
 }
