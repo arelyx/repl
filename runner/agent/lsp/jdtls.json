@@ -1,23 +1,42 @@
 {
   "jdtls": {
-    "command": ["jdtls"],
+    "command": [
+      "jdtls"
+    ],
     "initializationOptions": {
       "settings": {
         "java": {
-          "import": {"generatesMetadataFilesAtProjectRoot": false},
-          "autobuild": {"enabled": true},
-          "maven": {"downloadSources": false},
-          "completion": {"maxResults": 500}
+          "import": {
+            "generatesMetadataFilesAtProjectRoot": false
+          },
+          "autobuild": {
+            "enabled": true
+          },
+          "maven": {
+            "downloadSources": false
+          },
+          "completion": {
+            "maxResults": 500
+          }
         }
       }
     },
     "settings": {
       "java": {
-        "import": {"generatesMetadataFilesAtProjectRoot": false},
-        "autobuild": {"enabled": true},
-        "maven": {"downloadSources": false},
-        "completion": {"maxResults": 500}
+        "import": {
+          "generatesMetadataFilesAtProjectRoot": false
+        },
+        "autobuild": {
+          "enabled": true
+        },
+        "maven": {
+          "downloadSources": false
+        },
+        "completion": {
+          "maxResults": 500
+        }
       }
-    }
+    },
+    "maxMemoryMB": 1500
   }
 }

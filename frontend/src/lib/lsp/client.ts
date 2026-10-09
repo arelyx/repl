@@ -401,6 +401,7 @@ export class LspClient {
       if (this.disposed || !this.enabled) return;
       if (code === 404) return this.giveUp("not installed");
       if (code === 401 || code === 403) return this.giveUp("no access");
+      if (code === 503) return this.giveUp("stopped: used too much memory");
     }
     if (this.startupFailures >= MAX_STARTUP_FAILURES) return this.giveUp("failed to start");
     const delay = BACKOFF_MS[Math.min(this.attempt, BACKOFF_MS.length - 1)]!;

@@ -10,13 +10,16 @@ sed -i -e 's/^-Xmx.*/-Xmx1g/' -e 's/^-XX:ReservedCodeCacheSize=.*/-XX:ReservedCo
 
 # Without a Gradle or Maven build the server only imports a project described
 # by workspace.json in its root; the kotlin template ships one that puts
-# /opt/kotlinc's stdlib on the classpath over the image JDK. Indexing that JDK
-# and stdlib from scratch takes about a minute and peaks near the container's
-# 2 GB, so build the index here, once, against an identical workspace.json;
-# the launcher copies it into the user's cache on first start.
-scratch="$(mktemp -d)"
-mkdir -p "$scratch/project" "$scratch/home"
-cat > "$scratch/project/workspace.json" <<'JSON'
+# /opt/kotlinc's stdlib on the classpath over the image JDK. Indexing that from
+# scratch takes about a minute, so `make runner` pre-builds the index after
+# this image is built, in a separate memory-capped container
+# (runner/kotlin-index/), and layers it in at index-seed/.
+#
+# The warm-up must NOT run here. docker build steps have no memory limit and
+# run with oom_score_adj -500, and the 263.x server has twice misbehaved in
+# this step (a heap OOM + native abort at 1 GB; once ~30 GB of native memory
+# in 3 minutes, which took the host's desktop session down with it).
+install -m 0644 /dev/stdin "$dir/workspace.json" <<'JSON'
 {
   "modules": [
     {
@@ -46,18 +49,6 @@ cat > "$scratch/project/workspace.json" <<'JSON'
   ]
 }
 JSON
-printf 'fun main() {\n    println("warm-up")\n}\n' > "$scratch/project/main.kt"
-seed="$dir/index-seed"
-# warmup.py exits non-zero when the server needs killing after shutdown, so
-# judge success by the ready notification instead.
-HOME="$scratch/home" TMPDIR="$scratch" timeout 1200 python3 "$dir/bin/warmup.py" --build-tool json \
-  --timeout 1100 "$scratch/project" "$seed" > "$scratch/warmup.log" 2>&1 || true
-if ! grep -q 'intellij/ready-for-test' "$scratch/warmup.log"; then
-  tail -n 40 "$scratch/warmup.log"
-  exit 1
-fi
-rm -rf "$scratch" "$seed/.app.lock" "$seed/system/log"
-test -d "$seed/rocks"
 chmod -R a+rX "$dir"
 
 # Caches, logs and the index live in ~/.cache/kotlin-lsp (the default is a new
@@ -66,7 +57,7 @@ chmod -R a+rX "$dir"
 cat > /usr/local/bin/kotlin-lsp <<'SH'
 #!/bin/sh
 cache="$HOME/.cache/kotlin-lsp"
-if [ ! -d "$cache" ]; then
+if [ ! -d "$cache" ] && [ -d /opt/lsp/kotlin-lsp/index-seed ]; then
   mkdir -p "$HOME/.cache"
   cp -r /opt/lsp/kotlin-lsp/index-seed "$cache.$$" && mv -T "$cache.$$" "$cache" 2>/dev/null
   rm -rf "$cache.$$"

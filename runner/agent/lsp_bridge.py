@@ -17,12 +17,44 @@ import asyncio
 import json
 import os
 import signal
+import time
 
 from aiohttp import WSMsgType, web
 
 SERVERS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "lsp")
 APP_DIR = "/home/runner/app"
 MAX_MESSAGE = 64 * 1024 * 1024
+
+# Memory guard. A language server whose process group grows past its limit
+# (spec "maxMemoryMB", default below) is killed, and the server is refused
+# for COOLDOWN seconds so the editor's reconnect loop can't restart a runaway
+# over and over. The container's own 2 GB cgroup is the hard backstop; this
+# keeps one server from starving the user's program and shell first.
+DEFAULT_MAX_MEMORY_MB = 1280
+MEMORY_POLL_SECONDS = 2.0
+COOLDOWN_SECONDS = 300
+_PAGE = os.sysconf("SC_PAGE_SIZE")
+_cooldown_until: dict[str, float] = {}
+
+
+def _group_rss_mb(pgid: int) -> int:
+    """Resident memory of every process in a process group, in MB."""
+    total = 0
+    for entry in os.listdir("/proc"):
+        if not entry.isdigit():
+            continue
+        try:
+            with open(f"/proc/{entry}/stat") as f:
+                stat = f.read()
+            # Fields after the ")" that closes the command name: state is the
+            # 1st, pgrp the 3rd.
+            if int(stat[stat.rindex(")") + 2:].split()[2]) != pgid:
+                continue
+            with open(f"/proc/{entry}/statm") as f:
+                total += int(f.read().split()[1]) * _PAGE
+        except (OSError, ValueError, IndexError):
+            continue
+    return total // (1024 * 1024)
 
 
 def load_servers() -> dict:
@@ -122,6 +154,11 @@ def make_handler(child_env, on_open, on_close):
         spec = load_servers().get(name)
         if spec is None:
             raise web.HTTPNotFound(text=f"unknown language server {name!r}")
+        wait = _cooldown_until.get(name, 0) - time.monotonic()
+        if wait > 0:
+            # The editor's probe reads this status and stops retrying.
+            raise web.HTTPServiceUnavailable(
+                text=f"{name} was stopped for using too much memory; retry in {int(wait)}s")
         ws = web.WebSocketResponse(heartbeat=30, max_msg_size=MAX_MESSAGE)
         await ws.prepare(request)
         on_open()
@@ -148,7 +185,29 @@ def make_handler(child_env, on_open, on_close):
                 await ws.send_str(raw)
             await ws.close(code=1011, message=b"language server exited")
 
+        async def watch_memory():
+            limit = int(spec.get("maxMemoryMB", DEFAULT_MAX_MEMORY_MB))
+            while server.proc and server.proc.returncode is None:
+                await asyncio.sleep(MEMORY_POLL_SECONDS)
+                rss = _group_rss_mb(server.proc.pid)
+                if rss <= limit:
+                    continue
+                print(f"lsp: {name} using {rss} MB (limit {limit} MB); stopping it", flush=True)
+                _cooldown_until[name] = time.monotonic() + COOLDOWN_SECONDS
+                try:
+                    await ws.send_str(json.dumps({
+                        "jsonrpc": "2.0", "method": "window/showMessage",
+                        "params": {"type": 1, "message":
+                                   f"The {name} language server was stopped because it used "
+                                   f"{rss} MB of memory (limit {limit} MB). Intellisense for this "
+                                   f"language is off for {COOLDOWN_SECONDS // 60} minutes."}}))
+                except ConnectionResetError:
+                    pass
+                server.kill()
+                return
+
         pump = None
+        watchdog = None
         try:
             try:
                 await server.start()
@@ -156,6 +215,7 @@ def make_handler(child_env, on_open, on_close):
                 await ws.close(code=1011, message=f"cannot start {name}: {e}".encode()[:120])
                 return ws
             pump = asyncio.create_task(pump_from_server())
+            watchdog = asyncio.create_task(watch_memory())
             async for frame in ws:
                 if frame.type != WSMsgType.TEXT:
                     continue
@@ -178,6 +238,8 @@ def make_handler(child_env, on_open, on_close):
         finally:
             if pump:
                 pump.cancel()
+            if watchdog:
+                watchdog.cancel()
             server.kill()
             on_close()
         return ws
