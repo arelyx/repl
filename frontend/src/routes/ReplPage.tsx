@@ -10,6 +10,7 @@ import {
   GitFork,
   Globe,
   Monitor,
+  Package,
   PanelLeft,
   PanelRight,
   Pencil,
@@ -29,6 +30,7 @@ import { Kbd } from "@/components/Kbd";
 import { TopBar } from "@/components/workspace/TopBar";
 import { FileTree } from "@/components/workspace/FileTree";
 import { GitPanel } from "@/components/workspace/GitPanel";
+import { PackagesPanel } from "@/components/workspace/PackagesPanel";
 import { EditorArea } from "@/components/workspace/EditorArea";
 import { ConsolePane } from "@/components/workspace/ConsolePane";
 import { ShellPane } from "@/components/workspace/ShellPane";
@@ -114,8 +116,8 @@ function ReplLoader({ id }: { id: string }) {
   return <Workspace />;
 }
 
-type SideView = "files" | "git";
-type MobileView = "files" | "git" | "code" | "tools";
+type SideView = "files" | "git" | "packages";
+type MobileView = "files" | "git" | "packages" | "code" | "tools";
 
 const TOOLS: { id: ToolTab; label: string; short: string; icon: typeof Terminal }[] = [
   { id: "console", label: "Console", short: "Console", icon: Terminal },
@@ -308,6 +310,7 @@ function Workspace() {
         : []),
       { id: "view:files", title: "Show files", group: "View", icon: Files, shortcut: ["mod", "shift", "E"], run: () => showSide("files") },
       { id: "view:git", title: "Show version control", group: "View", icon: GitBranch, shortcut: ["mod", "shift", "G"], keywords: ["commit", "history", "diff"], run: () => showSide("git") },
+      { id: "view:packages", title: "Show packages", group: "View", icon: Package, keywords: ["install", "dependencies", "pip", "npm", "library", "packager"], run: () => showSide("packages") },
       ...(isMobile
         ? [{ id: "view:code", title: "Show code", group: "View", icon: Files, run: () => setMobileView("code") }]
         : [
@@ -381,6 +384,11 @@ function Workspace() {
           <GitPanel active />
         </div>
       )}
+      {view === "packages" && (
+        <div className="min-h-0 flex-1">
+          <PackagesPanel active />
+        </div>
+      )}
     </div>
   );
 
@@ -407,8 +415,8 @@ function Workspace() {
 
       {isMobile ? (
         <div className="relative min-h-0 flex-1">
-          <div className={cn("absolute inset-0", mobileView !== "files" && mobileView !== "git" && "hidden")}>
-            {sidebar(mobileView === "git" ? "git" : "files")}
+          <div className={cn("absolute inset-0", mobileView !== "files" && mobileView !== "git" && mobileView !== "packages" && "hidden")}>
+            {sidebar(mobileView === "git" || mobileView === "packages" ? mobileView : "files")}
           </div>
           <div className={cn("absolute inset-0", mobileView !== "code" && "hidden")}>
             <EditorArea />
@@ -468,6 +476,7 @@ function Workspace() {
                 go: () => showTool(t.id),
               })),
               { key: "git", label: "Git", active: mobileView === "git", go: () => setMobileView("git") },
+              { key: "packages", label: "Packages", active: mobileView === "packages", go: () => setMobileView("packages") },
             ] as const
           ).map((v) => (
             <button
@@ -509,7 +518,7 @@ function ActivityBar({
   const show = usePalette((s) => s.show);
   const item = (opts: {
     label: string;
-    keys: string[];
+    keys?: string[];
     icon: typeof Files;
     active?: boolean;
     onClick: () => void;
@@ -529,7 +538,7 @@ function ActivityBar({
         </button>
       </TooltipTrigger>
       <TooltipContent side="right" className="flex items-center gap-2">
-        {opts.label} <Kbd keys={opts.keys} />
+        {opts.label} {opts.keys && <Kbd keys={opts.keys} />}
       </TooltipContent>
     </Tooltip>
   );
@@ -537,6 +546,7 @@ function ActivityBar({
     <nav aria-label="Activity bar" className="flex w-10 shrink-0 flex-col border-r bg-card">
       {item({ label: "Files", keys: ["mod", "shift", "E"], icon: Files, active: sideView === "files", onClick: () => onSide("files") })}
       {item({ label: "Version control", keys: ["mod", "shift", "G"], icon: GitBranch, active: sideView === "git", onClick: () => onSide("git") })}
+      {item({ label: "Packages", icon: Package, active: sideView === "packages", onClick: () => onSide("packages") })}
       <div className="mt-auto" />
       {item({ label: "Tools pane", keys: ["mod", "J"], icon: PanelRight, active: toolsOpen, onClick: onTools })}
       {item({ label: "Command palette", keys: ["mod", "K"], icon: Command, onClick: () => show("commands") })}

@@ -181,16 +181,44 @@ def run_container(kwargs: dict):
         return docker_client().containers.run(**kwargs)
 
 
+RESOLV_CONF = ".resolv.conf"  # in REPLS_DIR; repl ids are [a-z0-9]+, so no clash
+
+
+def _resolv_conf() -> str | None:
+    """Host path of the resolv.conf repls get (see REPL_DNS), or None."""
+    servers = [s.strip() for s in settings.REPL_DNS.split(",") if s.strip()]
+    if not servers:
+        return None
+    text = "".join(f"nameserver {s}\n" for s in servers) + "options timeout:2 attempts:2\n"
+    path = os.path.join(settings.REPLS_DIR, RESOLV_CONF)
+    try:
+        with open(path) as f:
+            current = f.read()
+    except OSError:
+        current = None
+    if current != text:
+        tmp = f"{path}.tmp"
+        with open(tmp, "w") as f:
+            f.write(text)
+        os.chmod(tmp, 0o644)
+        os.replace(tmp, path)
+    return os.path.join(settings.repls_host_dir, RESOLV_CONF)
+
+
 def _container_kwargs(repl_id: str, user_id: str | None) -> dict:
     from docker.types import LogConfig
 
+    volumes = {f"{settings.repls_host_dir}/{repl_id}": {"bind": "/home/runner/app", "mode": "rw"}}
+    resolv = _resolv_conf()
+    if resolv:
+        volumes[resolv] = {"bind": "/etc/resolv.conf", "mode": "ro"}
     kwargs = dict(
         image=settings.RUNNER_IMAGE,
         name=container_name(repl_id),
         hostname=repl_id,
         detach=True,
         network=network_name(repl_id),
-        volumes={f"{settings.repls_host_dir}/{repl_id}": {"bind": "/home/runner/app", "mode": "rw"}},
+        volumes=volumes,
         mem_limit=settings.REPL_MEMORY,
         # No swap: a repl that hits its limit is OOM-killed inside its own
         # cgroup instead of pushing the host into swap.

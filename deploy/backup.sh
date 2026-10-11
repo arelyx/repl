@@ -27,8 +27,10 @@ mv "$OUT.part" "$OUT"
 
 # Repl files belong to the containers' uid 1000, which need not be this
 # user; the backend mounts the tree at the same path and runs as root.
+# .repl/cache is downloads that the package tools fetch again on demand.
 FILES="$DEST/repls-$STAMP.tar.gz"
-docker exec repl-backend tar -C "$(dirname "$REPLS_HOST_DIR")" -czf - "$(basename "$REPLS_HOST_DIR")" > "$FILES.part"
+docker exec repl-backend tar --exclude='*/.repl/cache' -C "$(dirname "$REPLS_HOST_DIR")" \
+  -czf - "$(basename "$REPLS_HOST_DIR")" > "$FILES.part"
 mv "$FILES.part" "$FILES"
 cp -p .env "$DEST/repl.env"
 

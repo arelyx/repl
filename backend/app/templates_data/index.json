@@ -281,7 +281,7 @@
     "language": "javascript",
     "category": "web",
     "icon": "🚂",
-    "run": "npm install --no-audit --no-fund && node index.js",
+    "run": "node index.js",
     "gui": false,
     "port": 3000
   },
@@ -336,7 +336,7 @@
     "language": "javascript",
     "category": "framework",
     "icon": "⚛️",
-    "run": "npm install --no-audit --no-fund && npm run dev",
+    "run": "npm run dev",
     "gui": false,
     "port": 5173
   },
@@ -347,7 +347,7 @@
     "language": "javascript",
     "category": "framework",
     "icon": "🟢",
-    "run": "npm install --no-audit --no-fund && npm run dev",
+    "run": "npm run dev",
     "gui": false,
     "port": 5173
   },

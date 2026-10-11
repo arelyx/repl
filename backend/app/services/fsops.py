@@ -87,7 +87,8 @@ def list_files(repl_id: str) -> list[dict]:
         rel_dir = "" if rel_dir == "." else rel_dir
         keep = []
         for d in sorted(dirnames):
-            if d == ".git":
+            # .repl holds installed packages and caches (runner/agent/packager.py).
+            if d == ".git" or (d == ".repl" and not rel_dir):
                 continue
             full = os.path.join(dirpath, d)
             relp = f"{rel_dir}/{d}" if rel_dir else d
@@ -308,7 +309,7 @@ def zip_repl(repl_id: str) -> str:
     try:
         with os.fdopen(fd_out, "wb") as raw, zipfile.ZipFile(raw, "w", zipfile.ZIP_DEFLATED) as zf:
             for dirpath, dirnames, filenames, dirfd in os.fwalk(root, follow_symlinks=False):
-                dirnames[:] = [d for d in dirnames if d != ".git"]
+                dirnames[:] = [d for d in dirnames if d != ".git" and not (d == ".repl" and dirpath == root)]
                 for f in filenames:
                     try:
                         fd = os.open(f, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=dirfd)

@@ -136,6 +136,12 @@ class Settings(BaseSettings):
     REPL_TMPFS_SIZE: str = "512m"
     REPL_LOG_MAX_SIZE: str = "5m"
     REPL_LOG_MAX_FILE: int = 2
+    # Resolvers written to each repl's /etc/resolv.conf. Docker's embedded DNS
+    # (127.0.0.11 on user-defined networks) is answered inside the container's
+    # network namespace, which gVisor's own network stack never reaches, so
+    # repls on runsc would have no DNS (no pip/npm/cargo installs). Empty =
+    # leave Docker's resolv.conf.
+    REPL_DNS: str = "1.1.1.1,8.8.8.8"
     # systemd slice every repl container lives under, so the whole fleet can be
     # capped in one place (`systemctl set-property repl-containers.slice
     # CPUQuota=1600% MemoryMax=48G`). Empty = Docker's default parent.

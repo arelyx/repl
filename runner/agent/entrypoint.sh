@@ -24,4 +24,9 @@ rm -f /tmp/.X0-lock /tmp/.X11-unix/X0 2>/dev/null
   wait
 ) &
 
-REPL_AGENT_TOKEN="$agent_token" exec python3 /opt/replagent/agent.py
+# .repl/ holds the repl's installed packages (packager.py); create it, and
+# the Python venv, before anything can run.
+/opt/python/current/bin/python3 /opt/replagent/packager.py ensure >/tmp/packager.log 2>&1 || true
+
+# The image's Python, not whatever python3 the project's venv puts first on PATH.
+REPL_AGENT_TOKEN="$agent_token" exec /opt/python/current/bin/python3 /opt/replagent/agent.py

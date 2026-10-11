@@ -106,6 +106,11 @@ export class LspManager {
     this.clients.get(server)?.retry();
   }
 
+  /** Restart every language server, e.g. after packages were installed. */
+  restartAll() {
+    for (const c of this.clients.values()) c.retry();
+  }
+
   private onServerReady(server: string, caps: ServerCapabilities) {
     if (this.disposed) return;
     this.providerRegs.get(server)?.forEach((d) => d.dispose());
