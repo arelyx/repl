@@ -28,6 +28,12 @@ ARG LUA_VERSION=5.5.1
 ARG GHC_VERSION=9.14.1
 ARG SBCL_VERSION=2.6.9
 ARG NASM_VERSION=3.02
+# Package managers that don't come with their language.
+ARG COMPOSER_VERSION=2.10.3
+ARG CPANM_VERSION=1.7049
+ARG GRADLE_VERSION=9.8.1
+ARG LUAROCKS_VERSION=3.13.0
+ARG CABAL_VERSION=3.18.1.0
 # ───────────────────────────────────────────────────────────────────────────
 
 FROM gcc:${GCC_VERSION} AS gcc
@@ -199,6 +205,62 @@ RUN printf 'export PATH="%s"\nexport JAVA_HOME=%s DOTNET_ROOT=%s SBCL_HOME=%s RU
 COPY lsp-install/ /tmp/lsp-install/
 RUN set -e; for f in /tmp/lsp-install/*.sh; do echo "== $f"; bash -euo pipefail "$f"; done; rm -rf /tmp/lsp-install
 
+# Package managers that don't ship with their language. Hackage's index (1 GB)
+# is fetched once here and shared read-only: per repl it would eat half the
+# disk quota (packager.py links it into each repl's CABAL_DIR).
+ARG COMPOSER_VERSION CPANM_VERSION GRADLE_VERSION LUAROCKS_VERSION CABAL_VERSION
+RUN cd /tmp && curl -fsSLO "https://getcomposer.org/download/${COMPOSER_VERSION}/composer.phar" \
+    && curl -fsSL "https://getcomposer.org/download/${COMPOSER_VERSION}/composer.phar.sha256sum" | sha256sum -c - \
+    && install -m 755 composer.phar /usr/local/bin/composer && rm composer.phar \
+    && curl -fsSL "https://cpan.metacpan.org/authors/id/M/MI/MIYAGAWA/App-cpanminus-${CPANM_VERSION}.tar.gz" \
+       | tar xz -C /tmp "App-cpanminus-${CPANM_VERSION}/bin/cpanm" \
+    && install -m 755 "/tmp/App-cpanminus-${CPANM_VERSION}/bin/cpanm" /opt/perl/bin/cpanm && rm -rf /tmp/App-cpanminus-* \
+    && sed -i '1s|.*|#!/opt/perl/bin/perl|' /opt/perl/bin/cpanm \
+    && curl -fsSL -o /tmp/gradle.zip "https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip" \
+    && echo "$(curl -fsSL "https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip.sha256")  /tmp/gradle.zip" | sha256sum -c - \
+    && unzip -q /tmp/gradle.zip -d /opt && ln -s "/opt/gradle-${GRADLE_VERSION}" /opt/gradle && rm /tmp/gradle.zip \
+    && curl -fsSL "https://luarocks.org/releases/luarocks-${LUAROCKS_VERSION}.tar.gz" | tar xz -C /tmp \
+    && cd "/tmp/luarocks-${LUAROCKS_VERSION}" \
+    && ./configure --prefix=/opt/luarocks --with-lua=/opt/lua > /dev/null && make > /dev/null && make install > /dev/null \
+    && cd / && rm -rf /tmp/luarocks-* \
+    && GHCUP_INSTALL_BASE_PREFIX=/opt ghcup install cabal "${CABAL_VERSION}" --set \
+    && GHCUP_INSTALL_BASE_PREFIX=/opt ghcup gc --cache --tmpdirs && chmod -R a+rX /opt/.ghcup \
+    && CABAL_DIR=/tmp/cabal cabal update \
+    && mkdir -p /opt/cabal && mv /tmp/cabal/packages /opt/cabal/ && rm -rf /tmp/cabal \
+    && rm -f /opt/cabal/packages/hackage.haskell.org/01-index.tar.gz /opt/cabal/packages/hackage.haskell.org/hackage-security-lock \
+    && chmod -R a+rX /opt/cabal
+
+# Where installed packages live. The container is deleted when a repl stops;
+# only the project directory survives, so every tool keeps its packages under
+# .repl/ in the project (runner/agent/packager.py). .repl/cache holds
+# re-downloadable files and is left out of backups.
+ENV VIRTUAL_ENV=/home/runner/app/.repl/python \
+    UV_CACHE_DIR=/home/runner/app/.repl/cache/uv UV_PYTHON_DOWNLOADS=never UV_TORCH_BACKEND=cpu \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    NPM_CONFIG_PREFIX=/home/runner/app/.repl/npm NPM_CONFIG_UPDATE_NOTIFIER=false \
+    NPM_CONFIG_FUND=false NPM_CONFIG_AUDIT=false \
+    CARGO_HOME=/home/runner/app/.repl/cargo \
+    GOPATH=/home/runner/app/.repl/go GOFLAGS=-modcacherw GOTOOLCHAIN=local \
+    GEM_HOME=/home/runner/app/.repl/gems \
+    COMPOSER_HOME=/home/runner/app/.repl/composer COMPOSER_CACHE_DIR=/home/runner/app/.repl/cache/composer \
+    GRADLE_USER_HOME=/home/runner/app/.repl/cache/gradle \
+    NUGET_PACKAGES=/home/runner/app/.repl/cache/nuget \
+    R_LIBS_USER=/home/runner/app/.repl/R \
+    PERL5LIB=/home/runner/app/.repl/perl/lib/perl5 PERL_LOCAL_LIB_ROOT=/home/runner/app/.repl/perl \
+    PERL_MB_OPT="--install_base /home/runner/app/.repl/perl" PERL_MM_OPT="INSTALL_BASE=/home/runner/app/.repl/perl" \
+    CABAL_DIR=/home/runner/app/.repl/cabal \
+    PATH=/home/runner/app/.repl/python/bin:/home/runner/app/.repl/npm/bin:/home/runner/app/.repl/cargo/bin:/home/runner/app/.repl/go/bin:/home/runner/app/.repl/gems/bin:/home/runner/app/.repl/composer/vendor/bin:/home/runner/app/.repl/perl/bin:/home/runner/app/.repl/lua/bin:/home/runner/app/.repl/cabal/bin:/opt/gradle/bin:/opt/luarocks/bin:$PATH
+RUN printf 'export PATH="%s"\n' "$PATH" > /etc/profile.d/01-repl-packages.sh \
+    && printf '%s\n' \
+       '# Prebuilt Linux binaries from Posit Package Manager: CRAN installs take' \
+       '# seconds instead of compiling from source.' \
+       'local({' \
+       '  options(repos = c(CRAN = "https://packagemanager.posit.co/cran/__linux__/resolute/latest"),' \
+       '          HTTPUserAgent = sprintf("R/%s R (%s)", getRversion(),' \
+       '            paste(getRversion(), R.version["platform"], R.version["arch"], R.version["os"])),' \
+       '          Ncpus = 2L)' \
+       '})' >> /etc/R/Rprofile.site
+
 # Every toolchain must actually run; fail the build otherwise.
 COPY versions.sh /usr/local/bin/repl-versions
 RUN chmod +x /usr/local/bin/repl-versions && repl-versions
@@ -206,12 +268,20 @@ RUN chmod +x /usr/local/bin/repl-versions && repl-versions
 # The unprivileged user code runs as (uid 1000 matches the host data dir owner)
 RUN (userdel -r ubuntu 2>/dev/null || true) \
     && useradd -m -u 1000 -s /bin/bash runner \
-    && mkdir -p /home/runner/app && chown -R runner:runner /home/runner \
+    && mkdir -p /home/runner/app /home/runner/.m2 \
+    && printf '<settings>\n  <localRepository>/home/runner/app/.repl/cache/m2</localRepository>\n</settings>\n' \
+       > /home/runner/.m2/settings.xml \
+    && chown -R runner:runner /home/runner \
     && echo 'export PS1="\[\e[1;32m\]~/\W\[\e[0m\]$ "' >> /home/runner/.bashrc
 
 # In-container agent (PTY websockets, run manager, port discovery)
 COPY agent/ /opt/replagent/
-RUN chmod +x /opt/replagent/entrypoint.sh
+RUN chmod +x /opt/replagent/entrypoint.sh \
+    && node -e 'console.log(JSON.stringify(require("module").builtinModules))' > /opt/replagent/node-builtins.json \
+    && printf '#!/bin/sh\nexec /opt/python/current/bin/python3 /opt/replagent/packager.py "$@"\n' > /usr/local/bin/repl-pkg \
+    && chmod 755 /usr/local/bin/repl-pkg
+# Every `lua` looks in the repl's LuaRocks tree too.
+ENV LUA_INIT=@/opt/replagent/lua-init.lua
 
 USER runner
 WORKDIR /home/runner/app

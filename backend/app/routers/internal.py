@@ -19,7 +19,8 @@ router = APIRouter(prefix="/internal", tags=["internal"])
 
 # lsp needs editor: language servers run project code (build scripts,
 # Maven/Gradle imports), so they are as powerful as a shell.
-SERVICE_MIN_ROLE = {"run": "viewer", "shell": "editor", "vnc": "editor", "lsp": "editor"}
+# pkg installs packages, which runs their install scripts: also shell-level.
+SERVICE_MIN_ROLE = {"run": "viewer", "shell": "editor", "vnc": "editor", "lsp": "editor", "pkg": "editor"}
 
 
 @router.get("/auth-repl")

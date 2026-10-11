@@ -114,6 +114,7 @@ Repl id: 10 random `[a-z0-9]` characters, safe as a DNS label and container name
 ${REPLS_DIR}/{replId}/            # git working tree, owned by uid 1000
   .replit                         # run config (TOML subset)
   .git/
+  .repl/                          # installed packages (§5 Package management); hidden
   ...user files
 ```
 
@@ -124,6 +125,10 @@ language = "python"
 entrypoint = "main.py"            # file opened by default in the editor
 gui = false                       # template hint: show the Display (VNC) tab
 port = 8000                       # template hint: default web preview port
+
+[packager]                        # optional
+guessImports = false              # Run won't install what the code imports
+ignoredPackages = ["foo"]         # names never installed automatically
 ```
 
 ## 5. Container runtime
@@ -226,6 +231,7 @@ reproducible.
 | `WS /run` | Attach to the single shared Run process. |
 | `WS /shell` | A fresh `bash -l` PTY per connection. |
 | `WS /lsp/{server}` | A language server (see `lsp_bridge.py`). |
+| `WS /pkg` | The Packages panel (see Package management below). |
 | `GET`/`WS /vnc/{path}` | noVNC's files and websockify, proxied to `127.0.0.1:6080`. |
 
 Every request must carry `X-Agent-Token`, or the agent answers 401. The
@@ -242,6 +248,97 @@ WebSocket messages are JSON text frames:
   `/run` only: `{"type":"status","running":true|false,"exitCode":int|null,"command":"..."}`
   (sent on connect and on every change). On connect to `/run` the agent first replays
   up to 256 KB of scrollback.
+
+### Package management
+
+`runner/agent/packager.py` puts one interface over each language's own
+package tool. It runs inside the repl as the repl user, on the image's Python.
+
+| Manager | Languages | Tool | Manifest | Search |
+|---|---|---|---|---|
+| `python` | Python | uv (pip works too) | `requirements.txt`, or `[project].dependencies` in `pyproject.toml` | PyPI's 15,000 most downloaded projects, plus an exact-name lookup |
+| `node` | JavaScript, TypeScript | npm | `package.json` | npm |
+| `rust` | Rust | cargo | `Cargo.toml` | crates.io |
+| `go` | Go | go modules | `go.mod` | pkg.go.dev |
+| `ruby` | Ruby | bundler | `Gemfile` | RubyGems |
+| `php` | PHP | composer | `composer.json` | Packagist |
+| `jvm` | Java, Kotlin | Maven or Gradle | `pom.xml`, `build.gradle(.kts)` | Maven Central |
+| `dotnet` | C#, F# | dotnet | `*.csproj` | NuGet |
+| `r` | R | `install.packages` (Posit's prebuilt binaries) | the installed library | CRAN |
+| `perl` | Perl | cpanm | `cpanfile` | MetaCPAN |
+| `lua` | Lua | LuaRocks | the installed tree | LuaRocks |
+| `haskell` | Haskell | cabal | `.ghc.environment.*` (read by `runghc`) | Hackage |
+
+C, C++, Fortran, Pascal, assembly, Bash, Scheme and Common Lisp have no
+package manager here.
+
+**Where packages live.** The container is deleted when a repl stops and only
+the project directory is kept, so the image points every tool into `.repl/`
+in the project (`runner/Dockerfile` sets the environment):
+
+- `.repl/python` is a venv over the image's Python, created with
+  `--system-site-packages`, so the preinstalled packages stay importable. It
+  is first on `PATH`, and `pip` in it is a shim for the image's pip, so
+  `pip install` in the shell also lands there.
+- `.repl/{npm,cargo,go,gems,composer,perl,lua,R,cabal}` hold what those tools
+  install.
+- `.repl/cache` holds downloads (uv, Maven, Gradle, NuGet, Composer). uv
+  hardlinks from its cache, so a package's files are on disk once. Forks
+  and backups leave the cache out.
+- Hackage's 1 GB index is part of the image and linked read-only into each
+  repl that uses cabal.
+
+`.repl/` is hidden from the file tree and the zip download. Its own
+`.gitignore` keeps it out of git. Node's `node_modules`, Rust's `target` and
+PHP's `vendor` stay where their tools put them, in the project. Everything
+counts toward `REPL_DISK_QUOTA_MB`.
+
+**Run.** Run starts `packager.py sync`, then the run command, in the same
+PTY, so the output shows in the console and Stop stops both. `sync` installs
+what a manifest declares when the manifest has changed since the last
+install (hashes in `.repl/state.json`). Unless `[packager] guessImports` is
+false, it also installs what the code imports:
+
+- Python: `import` statements via `ast`, skipping the standard library, the
+  project's own modules and imports inside `try/except ImportError`. A table
+  maps import names to distributions (`cv2` → `opencv-python`).
+- Node.js: `import`/`require` specifiers, skipping builtins, relative paths
+  and tsconfig aliases.
+- Go: `go mod tidy` when the code imports a module that `go.mod` lacks.
+- R: `library()`, `require()` and `pkg::`.
+
+Guessed packages are recorded in the manifest. A guess that fails is
+remembered and not retried. Problems never stop Run.
+
+**Packages panel.** `WS /pkg` messages:
+
+- client → agent: `{"type":"info"}`, `{"type":"search","id":n,"manager":"python","query":"..."}`,
+  `{"type":"add","manager":"python","name":"requests","version":""}`,
+  `{"type":"remove","manager":"python","name":"requests"}`.
+- agent → client: `{"type":"info","managers":[{id,label,tool,registry,manifest,nameHint,versioned,note,packages:[{name,spec,version,declared,dev}]}],"available":[...],"guessImports":true,"busy":null}`,
+  `{"type":"results","id":n,"items":[{name,version,description,downloads,url}]}`,
+  `{"type":"busy",...}`, `{"type":"log","data":"..."}`, `{"type":"done","op","manager","name","ok"}`, `{"type":"error","message"}`.
+
+One add or remove runs at a time. A file lock covers both the panel and
+Run's `sync`. Every panel open on the repl sees the log, and closing the
+panel doesn't stop an install. Adds use the tool's own command (`uv pip
+install` plus the manifest line, `npm install`, `cargo add`, `go get`,
+`bundle add`, `composer require`, `dotnet add package`), so manifests stay as
+their tools write them. Two cases edit files directly:
+
+- Maven and Gradle builds: the dependency is checked against Maven Central
+  first, and a Maven build is resolved right away, with the change undone if
+  that fails.
+- A single-file Java or Kotlin repl gets a `pom.xml` that builds the
+  directory, and its default run command becomes `mvn -q -B compile exec:java`.
+
+`repl-pkg` runs the same operations from the shell:
+
+```
+repl-pkg add python requests
+repl-pkg remove node lodash
+repl-pkg info
+```
 
 ## 6. HTTP API (`/api/v1`)
 
@@ -290,7 +387,7 @@ Create and fork return 403 past `MAX_REPLS_PER_USER`; fork returns 413 when the 
 
 **Files** (paths are relative, POSIX, validated to stay inside the repl; `.git` hidden)
 - `GET /repls/{id}/files` → `FileNode[]` flat list `{path, type: "file"|"dir", size}`,
-  sorted, skipping `.git` and not descending into `node_modules`, `__pycache__`, `target`, `.venv`, `bin/obj`.
+  sorted, skipping `.git` and `.repl` and not descending into `node_modules`, `__pycache__`, `target`, `.venv`, `bin/obj`.
 - `GET /repls/{id}/files/content?path=` → `{path, content, encoding: "utf-8"|"base64"}`
 - `PUT /repls/{id}/files/content {path, content}` → `{path, size}` (editor+)
 - `POST /repls/{id}/files {path, type}` → create a file or directory (editor+)
@@ -436,7 +533,18 @@ runaway is intermittent and its trigger is unknown. The defenses are layered:
   unless `ALLOW_INSECURE_RUNTIME=true`.
 - Each repl has its own bridge network (§5). Repls can reach the internet (for
   `pip install` and `npm install`) but not each other, and not postgres, which
-  sits on `rc-internal`.
+  sits on `rc-internal`. Their `/etc/resolv.conf` is a read-only mount
+  listing `REPL_DNS` (default `1.1.1.1,8.8.8.8`). Docker's embedded DNS at
+  127.0.0.11 is answered by iptables rules in the container's network
+  namespace, and gVisor's own network stack never passes through them, so
+  without the mount repls on runsc can't resolve any name.
+- Installing a package runs its install scripts, so `/ws/repls/{id}/pkg`
+  needs the editor role, like the shell. Packages run inside the repl's
+  sandbox like any other code. Installing what the code imports trusts the
+  registry's name for an import, which a typosquatted name can exploit;
+  `[packager] guessImports = false` turns it off and `ignoredPackages` skips
+  single names. Package names are checked against a strict pattern and
+  passed to the tools as single arguments, never through a shell.
 - The agent requires a per-repl token on every request (§5), so reaching
   `:8008` on a repl's network is not enough to get a shell. noVNC and VNC
   listen on the container's loopback only and are reached through the agent.
@@ -527,7 +635,7 @@ gVisor, a capped systemd slice, backups): [DEPLOY.md](DEPLOY.md).
 
 ## 13. Future work
 
-Packager UI (pip/npm search); GitHub import and push;
+GitHub import and push;
 always-on repls; debugger (DAP) integration; multi-host scheduling with a
 container pool for instant start.
 

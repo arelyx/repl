@@ -14,6 +14,10 @@ with:
 - **Display:** a VNC desktop for Tkinter, Swing and pygame, rendered with noVNC.
 - **Version control:** each repl is a git repo, with commit, history, diff and
   restore built in.
+- **Packages:** search and install from PyPI, npm, crates.io, Go modules,
+  RubyGems, Packagist, Maven Central, NuGet, CRAN, CPAN, LuaRocks and Hackage
+  in the Packages panel. Run installs what the manifest lists and what the code
+  imports, and packages stay installed across container restarts.
 - **Sharing:** add collaborators as viewer or editor, make repls public, fork
   them, and browse public repls on Explore.
 
@@ -73,6 +77,12 @@ End-to-end test through nginx (requires `pip install aiohttp`):
 
 ```bash
 python3 scripts/smoke_test.py http://localhost:8380 python c flask express
+```
+
+Package management for every language (search, install, run, restart, remove):
+
+```bash
+python3 scripts/packages_test.py http://localhost:8380
 ```
 
 ## Layout

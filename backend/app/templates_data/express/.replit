@@ -1,4 +1,4 @@
-run = "npm install --no-audit --no-fund && node index.js"
+run = "node index.js"
 language = "javascript"
 entrypoint = "index.js"
 gui = false

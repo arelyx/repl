@@ -159,6 +159,8 @@ def _fork_copy(src: str, dest: str) -> None:
         env={"PATH": "/usr/bin:/bin", "LANG": "C.UTF-8"},
         check=True, capture_output=True, timeout=300,
     )
+    # Installed packages come along; their download caches don't.
+    shutil.rmtree(os.path.join(dest, ".repl", "cache"), ignore_errors=True)
     fsops.chown_tree(dest)
 
 

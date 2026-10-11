@@ -7,6 +7,7 @@ Listens on 0.0.0.0:8008 and exposes:
   WS  /run     -> the single shared Run process (scrollback replay + status)
   WS  /shell   -> a fresh `bash -l` PTY per connection
   WS  /lsp/{server} -> a language server over JSON-RPC (see lsp_bridge.py)
+  WS  /pkg     -> the Packages panel: list, search, add, remove (packager.py)
   GET/WS /vnc/{path} -> noVNC + websockify (listening on 127.0.0.1:6080 only)
 
 Every request must carry `X-Agent-Token: $REPL_AGENT_TOKEN`. The backend
@@ -32,6 +33,7 @@ import aiohttp
 from aiohttp import WSMsgType, web
 
 import lsp_bridge
+import packager
 
 APP_DIR = "/home/runner/app"
 REPLIT_FILE = os.path.join(APP_DIR, ".replit")
@@ -59,15 +61,20 @@ FALLBACKS = [
     ("main.rb", "ruby main.rb"),
     ("index.php", "php index.php"),
     ("main.php", "php main.php"),
-    ("main.lua", "lua5.4 main.lua"),
+    ("main.lua", "lua main.lua"),
     ("main.pl", "perl main.pl"),
     ("main.sh", "bash main.sh"),
     ("main.hs", "runghc main.hs"),
     ("main.r", "Rscript main.r"),
     ("main.R", "Rscript main.R"),
     ("index.html", "python3 -m http.server 8000 --bind 0.0.0.0"),
-    ("package.json", "npm install && npm start"),
+    ("package.json", "npm start"),
 ]
+
+# Before every Run: install what the manifests declare and what the code
+# imports. It runs on the image's Python, so a broken project venv can't stop it.
+PACKAGER = [packager.BASE_PYTHON, os.path.join(os.path.dirname(os.path.abspath(__file__)), "packager.py")]
+SYNC_CMD = " ".join(shlex.quote(a) for a in PACKAGER + ["sync"])
 
 # Taken out of the environment before any child starts, so user programs (and
 # viewers watching their output) never see it.
@@ -387,7 +394,7 @@ class RunManager:
             self.command = cmd
             self.exit_code = None
             self.output(f"\r\n{DIM}❯ {cmd}{RESET}\r\n")
-            proc = PtyProcess(["bash", "-lc", cmd], child_env(port),
+            proc = PtyProcess(["bash", "-lc", f"{SYNC_CMD}\n{cmd}"], child_env(port),
                               lambda t, g=gen: self._out_if_current(g, t),
                               self.rows, self.cols)
             try:
@@ -616,6 +623,137 @@ async def shell_ws(request):
     return ws
 
 
+# ---------------------------------------------------------------- packages
+
+class PackageOps:
+    """The Packages panel. Every panel open on this repl sees the same log, so
+    a collaborator (or a reopened panel) watches an install already running."""
+
+    TIMEOUT = 1800  # cabal and R can build for a long time; nothing longer
+
+    def __init__(self):
+        self.clients = set()
+        self.busy = None          # {"op", "manager", "name"} while one runs
+        self.log = []
+        self.searches = asyncio.Semaphore(2)
+
+    def broadcast(self, obj):
+        for c in list(self.clients):
+            c.send(obj)
+
+    async def info(self, client=None):
+        out = await self._capture(PACKAGER + ["info"])
+        try:
+            msg = {"type": "info", **json.loads(out)}
+        except ValueError:
+            msg = {"type": "info", "managers": [], "available": [], "error": "couldn't read packages"}
+        msg["busy"] = self.busy
+        if client:
+            client.send(msg)
+        else:
+            self.broadcast(msg)
+
+    async def _capture(self, argv):
+        proc = await asyncio.create_subprocess_exec(
+            *argv, cwd=APP_DIR, env=child_env(), stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL)
+        try:
+            out, _ = await asyncio.wait_for(proc.communicate(), 120)
+        except asyncio.TimeoutError:
+            proc.kill()
+            return ""
+        return out.decode("utf-8", "replace")
+
+    async def search(self, client, req_id, manager, query):
+        async with self.searches:
+            try:
+                items = await asyncio.to_thread(packager.search, manager, query)
+                client.send({"type": "results", "id": req_id, "manager": manager, "items": items})
+            except Exception as e:  # registry down, rate limited, page changed
+                client.send({"type": "results", "id": req_id, "manager": manager, "items": [],
+                             "error": f"search failed: {e}"})
+
+    async def change(self, client, op, manager, name, version):
+        if self.busy:
+            client.send({"type": "error", "message": f"Wait for {self.busy['name']} to finish"})
+            return
+        self.busy = {"op": op, "manager": manager, "name": name}
+        self.log = []
+        self.broadcast({"type": "busy", "busy": self.busy})
+        argv = PACKAGER + [op, manager, name] + ([version] if version else [])
+        code = -1
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *argv, cwd=APP_DIR, env=child_env(), stdin=asyncio.subprocess.DEVNULL,
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.STDOUT,
+                start_new_session=True)
+
+            async def pump():
+                decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
+                while chunk := await proc.stdout.read(4096):
+                    text = decoder.decode(chunk)
+                    if sum(len(t) for t in self.log) < SCROLLBACK_LIMIT:
+                        self.log.append(text)
+                    self.broadcast({"type": "log", "data": text})
+
+            try:
+                await asyncio.wait_for(asyncio.gather(pump(), proc.wait()), self.TIMEOUT)
+            except asyncio.TimeoutError:
+                os.killpg(proc.pid, signal.SIGKILL)
+                await proc.wait()
+                self.broadcast({"type": "log", "data": "\nTimed out.\n"})
+            code = proc.returncode
+        finally:
+            done = {"type": "done", **self.busy, "ok": code == 0}
+            self.busy = None
+            self.broadcast(done)
+            await self.info()
+
+
+PKG = PackageOps()
+
+
+async def pkg_ws(request):
+    ws = web.WebSocketResponse(heartbeat=30, max_msg_size=64 * 1024)
+    await ws.prepare(request)
+    client = Client(ws)
+    # nginx only lets editors reach /pkg.
+    _connected("editor")
+    tasks = set()
+
+    def spawn(coro):
+        t = asyncio.create_task(coro)
+        tasks.add(t)
+        t.add_done_callback(tasks.discard)
+
+    try:
+        PKG.clients.add(client)
+        if PKG.busy:
+            client.send({"type": "busy", "busy": PKG.busy, "log": "".join(PKG.log)})
+        async for msg in ws:
+            if msg.type != WSMsgType.TEXT:
+                continue
+            obj = parse(msg)
+            if not obj:
+                continue
+            t = obj.get("type")
+            if t == "info":
+                spawn(PKG.info(client))
+            elif t == "search":
+                spawn(PKG.search(client, obj.get("id"), str(obj.get("manager", "")), str(obj.get("query", ""))))
+            elif t in ("add", "remove"):
+                # Not tied to this socket: closing the panel doesn't abort an install.
+                asyncio.create_task(PKG.change(client, t, str(obj.get("manager", "")),
+                                               str(obj.get("name", "")), str(obj.get("version", "") or "")))
+    finally:
+        PKG.clients.discard(client)
+        for t in tasks:
+            t.cancel()
+        client.close()
+        _disconnected("editor")
+    return ws
+
+
 _HOP_HEADERS = {"connection", "keep-alive", "transfer-encoding", "upgrade", "content-length",
                 "content-encoding", "proxy-connection", "te", "trailer"}
 
@@ -684,6 +822,7 @@ def main():
     app.router.add_get("/ports", ports)
     app.router.add_get("/run", run_ws)
     app.router.add_get("/shell", shell_ws)
+    app.router.add_get("/pkg", pkg_ws)
     app.router.add_route("*", "/vnc/{rest:.*}", vnc_proxy)
     app.router.add_get("/lsp/{server}", lsp_bridge.make_handler(
         lambda: child_env(read_replit().get("port")),

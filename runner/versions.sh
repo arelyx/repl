@@ -36,4 +36,15 @@ check fpc        fpc -iV
 check guile      guile --version
 check nasm       nasm -v
 check bash       bash --version
+# package managers
+check uv         uv --version
+check pip        pip --version
+check npm        npm --version
+check cargo      cargo --version
+check bundler    bundle --version
+check composer   composer --version
+check gradle     gradle --version
+check cpanm      cpanm --version
+check luarocks   luarocks --version
+check cabal      cabal --version
 exit $fail
