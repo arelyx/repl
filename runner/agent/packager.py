@@ -1327,6 +1327,21 @@ class Jvm(Manager):
         say(f"Removed {name}")
 
     def search(self, query):
+        # Maven Central's own site search answers in well under a second;
+        # search.maven.org (the documented API) often takes 20 s or times out.
+        try:
+            body = json.dumps({"size": 20, "searchTerm": query, "filter": []}).encode()
+            req = urllib.request.Request("https://central.sonatype.com/api/internal/browse/components", data=body,
+                                         headers={"User-Agent": UA, "Content-Type": "application/json"})
+            with urllib.request.urlopen(req, timeout=10) as r:
+                comps = json.loads(r.read()).get("components", [])
+            return [{"name": f"{c['namespace']}:{c['name']}",
+                     "version": (c.get("latestVersionInfo") or {}).get("version"),
+                     "description": c.get("description"),
+                     "url": f"https://central.sonatype.com/artifact/{c['namespace']}/{c['name']}"}
+                    for c in comps if c.get("namespace") and c.get("name")]
+        except (urllib.error.URLError, TimeoutError, ValueError, KeyError):
+            pass
         data = fetch_json(f"https://search.maven.org/solrsearch/select?q={q(query)}&rows=20&wt=json", timeout=20)
         return [{"name": d["id"], "version": d.get("latestVersion"), "description": None,
                  "url": f"https://central.sonatype.com/artifact/{d.get('g')}/{d.get('a')}"}
