@@ -1,5 +1,8 @@
 # Repl
 
+**[Try it live at repl.arelyx.xyz →](https://repl.arelyx.xyz)** Make an account
+and you're writing and running code in a few seconds, with nothing to install.
+
 A self-hosted clone of 2020-era Replit. Pick a language or framework, get a
 real Linux container, and write and run code from the browser. Each repl comes
 with:
@@ -39,6 +42,8 @@ There are 35 templates, all smoke-tested in the image:
 | Flask with a live web preview | Tkinter on the VNC display |
 |---|---|
 | ![Flask webview](docs/screenshots/flask-webview.jpg) | ![Tkinter over VNC](docs/screenshots/tkinter-vnc.jpg) |
+| **Installing a package from PyPI** | **Completions from the installed package** |
+| ![Packages panel](docs/screenshots/packages.jpg) | ![Pyright completions](docs/screenshots/intellisense.jpg) |
 
 See **[docs/DESIGN.md](docs/DESIGN.md)** for the architecture, API, and the
 reasoning behind each decision.
