@@ -47,7 +47,8 @@ def latest_listing(url: str, pattern: str) -> str:
 
 
 def node() -> str:
-    return getj("https://nodejs.org/dist/index.json")[0]["version"].lstrip("v")
+    # The index lists prereleases too (v27.0.0-alpha...); take the newest release.
+    return next(r["version"].lstrip("v") for r in getj("https://nodejs.org/dist/index.json") if "-" not in r["version"])
 
 
 def go() -> str:
