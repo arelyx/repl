@@ -13,20 +13,20 @@
 ARG UBUNTU_VERSION=26.04
 ARG GCC_VERSION=16.2
 ARG LLVM_VERSION=23
-ARG PYTHON_VERSION=3.14.8
-ARG NODE_VERSION=26.10.0
-ARG GO_VERSION=1.27.1
-ARG RUST_VERSION=1.99.0
-ARG JAVA_VERSION=jdk-27+35
+ARG PYTHON_VERSION=3.15.2
+ARG NODE_VERSION=26.13.0
+ARG GO_VERSION=1.27.4
+ARG RUST_VERSION=1.99.1
+ARG JAVA_VERSION=jdk-27.0.1.0.2+1
 ARG MAVEN_VERSION=3.10.0
-ARG KOTLIN_VERSION=2.4.20
-ARG DOTNET_SDK_VERSION=10.0.401
-ARG RUBY_VERSION=4.0.7
-ARG PHP_VERSION=8.5.11
+ARG KOTLIN_VERSION=2.4.21
+ARG DOTNET_SDK_VERSION=11.0.100
+ARG RUBY_VERSION=4.0.9
+ARG PHP_VERSION=8.5.12
 ARG PERL_VERSION=5.44.0
 ARG LUA_VERSION=5.5.1
 ARG GHC_VERSION=9.14.1
-ARG SBCL_VERSION=2.6.9
+ARG SBCL_VERSION=2.6.10
 ARG NASM_VERSION=3.02
 # Package managers that don't come with their language.
 ARG COMPOSER_VERSION=2.10.3
@@ -193,7 +193,7 @@ COPY --from=small /opt/lua /opt/lua
 COPY --from=small /opt/nasm /opt/nasm
 
 ENV JAVA_HOME=/opt/java DOTNET_ROOT=/opt/dotnet SBCL_HOME=/opt/sbcl/lib/sbcl \
-    DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_NOLOGO=1 DOTNET_SKIP_WORKLOAD_INTEGRITY_CHECK=1 DISPLAY=:0 \
+    DOTNET_ROLL_FORWARD=LatestMajor DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_NOLOGO=1 DOTNET_SKIP_WORKLOAD_INTEGRITY_CHECK=1 DISPLAY=:0 \
     PATH=/home/runner/.local/bin:/home/runner/.cargo/bin:/opt/cargo/bin:/usr/local/go/bin:/opt/node/bin:/opt/java/bin:/opt/maven/bin:/opt/kotlinc/bin:/opt/dotnet:/opt/.ghcup/bin:/opt/sbcl/bin:/opt/ruby/bin:/opt/php/bin:/opt/perl/bin:/opt/lua/bin:/opt/nasm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 # Login shells (the console and shell run `bash -l`) reset PATH from

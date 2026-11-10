@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Bump the toolchain pins in runner/Dockerfile to the latest stable releases.
+"""Bump the toolchain pins in runner/Dockerfile (and the Kotlin language
+server, whose builds expire) to the latest stable releases.
 
     python3 runner/update-versions.py          # rewrite the Dockerfile
     python3 runner/update-versions.py --check  # report only; exit 1 if stale
@@ -17,6 +18,7 @@ import urllib.request
 from pathlib import Path
 
 DOCKERFILE = Path(__file__).with_name("Dockerfile")
+CSHARP_PROJECT = Path(__file__).parent.parent / "backend/app/templates_data/csharp/main.csproj"
 UA = {"User-Agent": "repl-update-versions"}
 
 
@@ -100,14 +102,42 @@ SOURCES = {
 }
 
 
-def main() -> int:
-    check = "--check" in sys.argv
-    text = DOCKERFILE.read_text()
+def kotlin_lsp() -> str:
+    # JetBrains' kotlin-server builds stop starting ("This build of
+    # kotlin-server has expired") a few weeks after release, so this pin
+    # must move with them.
+    tags = [r["tag_name"] for r in getj("https://api.github.com/repos/Kotlin/kotlin-lsp/releases")
+            if not r["prerelease"] and not r["draft"]]
+    return max((t.removeprefix("kotlin-lsp/v") for t in tags), key=vkey)
+
+
+# Pins kept in the language-server install scripts rather than the Dockerfile.
+SCRIPT_SOURCES = {
+    Path(__file__).with_name("lsp-install") / "39-kotlin-lsp.sh": {"KOTLIN_LSP_VERSION": kotlin_lsp},
+}
+
+
+def sync_dotnet_target(dockerfile: str) -> None:
+    """The image has only the newest SDK and its runtime, so the C# template
+    must target that major version or `dotnet run` can't find a framework."""
+    m = re.search(r"^ARG DOTNET_SDK_VERSION=(\d+)\.", dockerfile, re.M)
+    if not m:
+        return
+    proj = CSHARP_PROJECT.read_text()
+    new = re.sub(r"<TargetFramework>net\d+\.0</TargetFramework>", f"<TargetFramework>net{m.group(1)}.0</TargetFramework>", proj)
+    if new != proj:
+        CSHARP_PROJECT.write_text(new)
+        print(f"C# template now targets net{m.group(1)}.0")
+
+
+def bump(path: Path, prefix: str, sources: dict, check: bool) -> tuple[int, int, str]:
+    """Update `{prefix}{NAME}=version` lines in `path`; return (stale, errors, text)."""
+    text = path.read_text()
     stale = errors = 0
-    for arg, source in SOURCES.items():
-        m = re.search(rf"^ARG {arg}=(\S+)$", text, re.M)
+    for arg, source in sources.items():
+        m = re.search(rf"^{prefix}{arg}=(\S+)$", text, re.M)
         if not m:
-            print(f"{arg:20} not pinned in Dockerfile")
+            print(f"{arg:20} not pinned in {path.name}")
             errors += 1
             continue
         current = m.group(1)
@@ -124,8 +154,19 @@ def main() -> int:
         print(f"{arg:20} {current:14} -> {latest}")
         text = text[: m.start(1)] + latest + text[m.end(1):]
     if not check and stale:
-        DOCKERFILE.write_text(text)
-        print(f"\nUpdated {stale} pin(s) in {DOCKERFILE}. Rebuild with `make runner`.")
+        path.write_text(text)
+    return stale, errors, text
+
+
+def main() -> int:
+    check = "--check" in sys.argv
+    stale, _, text = bump(DOCKERFILE, "ARG ", SOURCES, check)
+    if not check and stale:
+        sync_dotnet_target(text)
+    for script, sources in SCRIPT_SOURCES.items():
+        stale += bump(script, "", sources, check)[0]
+    if not check and stale:
+        print(f"\nUpdated {stale} pin(s). Rebuild with `make runner`.")
     return 1 if (check and stale) else 0
 
 
