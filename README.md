@@ -24,8 +24,8 @@ with:
 - **Sharing:** add collaborators as viewer or editor, make repls public, fork
   them, and browse public repls on Explore.
 
-Every language runs its latest stable release: Python 3.14, Node 26, Go 1.27,
-Rust 1.99, Java 27, .NET 10, GCC 16, Clang 23, Ruby 4.0, PHP 8.5, and so on.
+Every language runs its latest stable release: Python 3.15, Node 26, Go 1.27,
+Rust 1.99, Java 27, .NET 11, GCC 16, Clang 23, Ruby 4.0, PHP 8.5, and so on.
 `make versions` prints the full list and `make update-versions` bumps the pins
 (details in [DESIGN.md §5](docs/DESIGN.md#toolchains-are-current-upstream-releases)).
 

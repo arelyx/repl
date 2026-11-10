@@ -1,5 +1,5 @@
 # Kotlin: JetBrains' official Kotlin LSP (standalone archive, bundled JBR).
-KOTLIN_LSP_VERSION=263.6379.0
+KOTLIN_LSP_VERSION=263.7084.0
 dir=/opt/lsp/kotlin-lsp
 mkdir -p "$dir"
 curl -fsSL "https://download.jetbrains.com/language-server/kotlin-server/${KOTLIN_LSP_VERSION}/kotlin-server-${KOTLIN_LSP_VERSION}.tar.gz" \

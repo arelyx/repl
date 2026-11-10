@@ -193,7 +193,7 @@ COPY --from=small /opt/lua /opt/lua
 COPY --from=small /opt/nasm /opt/nasm
 
 ENV JAVA_HOME=/opt/java DOTNET_ROOT=/opt/dotnet SBCL_HOME=/opt/sbcl/lib/sbcl \
-    DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_NOLOGO=1 DOTNET_SKIP_WORKLOAD_INTEGRITY_CHECK=1 DISPLAY=:0 \
+    DOTNET_ROLL_FORWARD=LatestMajor DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_NOLOGO=1 DOTNET_SKIP_WORKLOAD_INTEGRITY_CHECK=1 DISPLAY=:0 \
     PATH=/home/runner/.local/bin:/home/runner/.cargo/bin:/opt/cargo/bin:/usr/local/go/bin:/opt/node/bin:/opt/java/bin:/opt/maven/bin:/opt/kotlinc/bin:/opt/dotnet:/opt/.ghcup/bin:/opt/sbcl/bin:/opt/ruby/bin:/opt/php/bin:/opt/perl/bin:/opt/lua/bin:/opt/nasm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 # Login shells (the console and shell run `bash -l`) reset PATH from
