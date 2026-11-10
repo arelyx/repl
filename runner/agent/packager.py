@@ -1581,9 +1581,13 @@ class Lua(Manager):
     def search(self, query):
         page = fetch(f"https://luarocks.org/search?q={q(query)}", accept="text/html")
         out = []
-        for m in re.finditer(r'<a class="title" href="/modules/([^/"]+)/([^"]+)">.*?</a>(.*?)</li>', page, re.S):
+        # Attribute order has changed before (class/href), so don't depend on it.
+        for m in re.finditer(r'<a (?=[^>]*class="title")[^>]*href="/modules/([^/"]+)/([^"]+)"[^>]*>.*?</a>(.*?)</li>',
+                             page, re.S):
             summary = re.search(r'<div class="summary">(.*?)</div>', m.group(3), re.S)
+            downloads = re.search(r'downloads:\s*<span title="([\d,]+)"', m.group(3))
             out.append({"name": html.unescape(m.group(2)), "version": None,
+                        "downloads": int(downloads.group(1).replace(",", "")) if downloads else None,
                         "description": html.unescape(re.sub(r"<[^>]+>", "", summary.group(1))).strip() if summary else None,
                         "url": f"https://luarocks.org/modules/{m.group(1)}/{m.group(2)}"})
         return out[:20]
